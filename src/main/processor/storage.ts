@@ -1,10 +1,6 @@
 import * as lancedb from '@lancedb/lancedb';
 import * as path from 'path';
 import * as fs from 'fs';
-// We use require for electron to avoid aggressive static analysis or issues in Node test env
-// where 'electron' module might not behave as expected if imported at top level without checking.
-// However, standard import is usually fine if we guard usages.
-import { app } from 'electron';
 
 export interface StoredEvent extends Record<string, unknown> {
   id: string;
@@ -30,6 +26,9 @@ export class StorageService {
     // Check if running in Electron (using process.versions.electron)
     if (process.versions.electron) {
       try {
+        // Dynamic require to avoid issues when running outside Electron (e.g., CLI tools)
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { app } = require('electron');
         const userDataPath = app.getPath('userData');
         return path.join(userDataPath, 'lancedb');
       } catch (e) {

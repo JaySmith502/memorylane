@@ -12,17 +12,17 @@ Add a minimal MCP server to MemoryLane that exposes one `search_context` tool, p
 
 ## Tickets
 
-### 1. CLI Tooling: Database Query Script
+### 1. CLI Tooling: Database Query Script ✅
 
 **Summary**: Create a standalone CLI script to search the database from the terminal.
 
 **Why**: Enables verification that data is being captured correctly and search works as expected. Essential for development and debugging.
 
 **Acceptance Criteria**:
-- [ ] Script can be run via `npm run db:search "query"`
-- [ ] Outputs results with timestamp and text content
-- [ ] Works with the production database path (`userData/lancedb`)
-- [ ] Handles empty results gracefully
+- [x] Script can be run via `npm run db:search "query"`
+- [x] Outputs results with timestamp and text content
+- [x] Works with the production database path (`userData/lancedb`)
+- [x] Handles empty results gracefully
 
 **Technical Notes**:
 - Create `scripts/db-search.ts`
