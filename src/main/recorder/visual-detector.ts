@@ -42,8 +42,8 @@ function calculateDHash(buffer: Buffer, width: number, height: number): string {
  * Calculate Hamming distance between two hashes
  * Returns percentage difference (0-100)
  */
-function hammingDistance(hash1: string, hash2: string): number {
-  if (hash1.length !== hash2.length) return 100;
+function hammingDistance(hash1: string | null, hash2: string | null): number {
+  if (hash1 == null || hash2 == null || hash1.length !== hash2.length) return 100;
 
   let distance = 0;
   for (let i = 0; i < hash1.length; i++) {
@@ -89,24 +89,22 @@ async function checkForChanges(): Promise<void> {
       VISUAL_DETECTOR_CONFIG.SAMPLE_HEIGHT
     );
 
-    if (previousHash) {
-      const difference = hammingDistance(previousHash, currentHash);
+    const difference = hammingDistance(previousHash, currentHash);
 
-      console.log(`[Visual Detector] Hamming distance: ${difference.toFixed(1)}%`);
+    console.log(`[Visual Detector] Hamming distance: ${difference.toFixed(1)}%`);
 
-      // Single threshold check - binary decision
-      if (difference >= VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT) {
-        console.log(`[Visual Detector] Significant change detected (>=${VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT}%) - notifying callbacks`);
+    // Single threshold check - binary decision
+    if (difference >= VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT) {
+      console.log(`[Visual Detector] Significant change detected (>=${VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT}%) - notifying callbacks`);
 
-        // Notify all callbacks
-        changeCallbacks.forEach((callback) => {
-          try {
-            callback();
-          } catch (error) {
-            console.error('Error in change detection callback:', error);
-          }
-        });
-      }
+      // Notify all callbacks
+      changeCallbacks.forEach((callback) => {
+        try {
+          callback();
+        } catch (error) {
+          console.error('Error in change detection callback:', error);
+        }
+      });
     }
 
     // Store current hash for next comparison

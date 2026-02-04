@@ -33,7 +33,7 @@ function handleMouseClick(event: UiohookMouseEvent): void {
   clickDebounceTimeoutId = setTimeout(() => {
     const context: InteractionContext = {
       type: 'click',
-      timestamp: Date.now(),
+      timestamp: Date.now() - INTERACTION_MONITOR_CONFIG.CAPTURE_DELAY_MS,
       clickPosition: {
         x: event.x,
         y: event.y,
@@ -84,7 +84,7 @@ function handleKeyboard(): void {
 
     isTyping = false;
     const endTime = Date.now();
-    const durationMs = endTime - typingSessionStartTime;
+    const durationMs = endTime - typingSessionStartTime - INTERACTION_MONITOR_CONFIG.CAPTURE_DELAY_MS;
 
     console.log(`[Interaction Monitor] Typing session ended: ${typingSessionKeyCount} keys over ${durationMs}ms`);
 
