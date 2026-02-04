@@ -111,11 +111,11 @@ const updateTrayMenu = () => {
         }
       },
     },
-    { type: 'separator' },
+/*     { type: 'separator' },
     {
       label: `Screenshots: ${capture.getScreenshotsDir()}`,
       enabled: false,
-    },
+    }, */
     { type: 'separator' },
     {
       label: 'Quit',
