@@ -55,17 +55,17 @@ Add a minimal MCP server to MemoryLane that exposes one `search_context` tool, p
 
 ---
 
-### 3. MCP Server: Project Setup
+### 3. MCP Server: Project Setup ✅
 
 **Summary**: Install MCP SDK and create the basic server structure.
 
 **Why**: Foundation for the MCP integration.
 
 **Acceptance Criteria**:
-- [ ] `@modelcontextprotocol/sdk` installed
-- [ ] Basic MCP server file created at `src/main/mcp/server.ts`
-- [ ] Server can start and respond to `initialize` request
-- [ ] Can be tested standalone (outside Electron) via stdio
+- [x] `@modelcontextprotocol/sdk` installed
+- [x] Basic MCP server file created at `src/main/mcp/server.ts`
+- [x] Server can start and respond to `initialize` request
+- [x] Can be tested standalone (outside Electron) via stdio
 
 **Technical Notes**:
 - Use `@modelcontextprotocol/sdk` package
