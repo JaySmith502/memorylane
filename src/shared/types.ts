@@ -45,3 +45,14 @@ export interface InteractionContext {
 }
 
 export type OnScreenshotCallback = (screenshot: Screenshot) => void;
+
+export interface ClassificationInput {
+  startScreenshot: Screenshot;
+  endScreenshot: Screenshot;
+  events: InteractionContext[];
+}
+
+export interface ClassificationResult {
+  summary: string;
+  timestamp: number;
+}

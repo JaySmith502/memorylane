@@ -25,6 +25,7 @@ import path from 'node:path';
 import { EventProcessor } from './processor/index';
 import { EmbeddingService } from './processor/embedding';
 import { StorageService } from './processor/storage';
+import { SemanticClassifierService } from './processor/semantic-classifier';
 import { Screenshot } from '../shared/types';
 import dotenv from 'dotenv';
 
@@ -53,7 +54,8 @@ if (isMCPMode) {
       // Initialize only the services needed for search
       const embeddingService = new EmbeddingService();
       const storageService = new StorageService(StorageService.getDefaultDbPath());
-      const processor = new EventProcessor(embeddingService, storageService);
+      const classifierService = new SemanticClassifierService();
+      const processor = new EventProcessor(embeddingService, storageService, classifierService);
       
       console.log('[MCP Mode] Services initialized');
       
@@ -94,7 +96,8 @@ if (isMCPMode) {
     // Initialize Processor Services
     const embeddingService = new EmbeddingService();
     const storageService = new StorageService(StorageService.getDefaultDbPath());
-    processor = new EventProcessor(embeddingService, storageService);
+    const classifierService = new SemanticClassifierService();
+    processor = new EventProcessor(embeddingService, storageService, classifierService);
   };
 
   const createTray = () => {
@@ -135,26 +138,11 @@ if (isMCPMode) {
       }
     });
 
-    // Subscribe to interaction events (independent stream)
+    // Subscribe to interaction events - pass them to the processor for aggregation
     interactionMonitor.onInteraction((event) => {
-      const logData: Record<string, unknown> = {
-        type: event.type,
-        timestamp: new Date(event.timestamp).toISOString(),
-      };
-
-      if (event.clickPosition) {
-        logData.clickPosition = event.clickPosition;
+      if (processor) {
+        processor.addInteractionEvent(event);
       }
-
-      if (event.keyCount) {
-        logData.keyCount = event.keyCount;
-      }
-
-      if (event.durationMs) {
-        logData.durationMs = event.durationMs;
-      }
-
-      console.log('Interaction event:', logData);
     });
   };
 
