@@ -13,7 +13,8 @@
     "lint": "eslint --ext .ts,.tsx .",
     "test": "vitest",
     "postinstall": "electron-rebuild -f -w uiohook-napi,@lancedb/lancedb,onnxruntime-node",
-    "db:search": "tsx scripts/db-search.ts"
+    "db:search": "tsx scripts/db-search.ts",
+    "db:stats": "tsx scripts/db-stats.ts"
   },
   "keywords": [],
   "author": {

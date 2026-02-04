@@ -1,0 +1,157 @@
+#!/usr/bin/env npx tsx
+/**
+ * CLI tool to display MemoryLane database statistics.
+ * 
+ * Usage:
+ *   npm run db:stats
+ *   npm run db:stats -- --db-path /custom/path
+ */
+
+import * as path from 'path';
+import * as os from 'os';
+import * as fs from 'fs';
+import { StorageService } from '../src/main/processor/storage';
+
+interface CLIArgs {
+  dbPath: string;
+}
+
+function getDefaultDbPath(): string {
+  if (process.platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Application Support', 'memorylane', 'lancedb');
+  }
+  if (process.platform === 'win32') {
+    return path.join(process.env.APPDATA || '', 'memorylane', 'lancedb');
+  }
+  return path.join(os.homedir(), '.config', 'memorylane', 'lancedb');
+}
+
+function parseArgs(): CLIArgs {
+  const args = process.argv.slice(2);
+  let dbPath = getDefaultDbPath();
+  
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--db-path' && args[i + 1]) {
+      dbPath = args[i + 1];
+      i++;
+    }
+  }
+  
+  return { dbPath };
+}
+
+function formatTimestamp(timestamp: number): string {
+  const date = new Date(timestamp);
+  return date.toLocaleString();
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 Bytes';
+  
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function getDirectorySize(dirPath: string): number {
+  let totalSize = 0;
+  
+  if (!fs.existsSync(dirPath)) return 0;
+  
+  const items = fs.readdirSync(dirPath);
+  
+  for (const item of items) {
+    const itemPath = path.join(dirPath, item);
+    const stats = fs.statSync(itemPath);
+    
+    if (stats.isDirectory()) {
+      totalSize += getDirectorySize(itemPath);
+    } else {
+      totalSize += stats.size;
+    }
+  }
+  
+  return totalSize;
+}
+
+function formatDuration(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  
+  if (days > 0) {
+    return `${days} day${days > 1 ? 's' : ''}, ${hours % 24} hour${hours % 24 !== 1 ? 's' : ''}`;
+  }
+  if (hours > 0) {
+    return `${hours} hour${hours > 1 ? 's' : ''}, ${minutes % 60} minute${minutes % 60 !== 1 ? 's' : ''}`;
+  }
+  if (minutes > 0) {
+    return `${minutes} minute${minutes > 1 ? 's' : ''}`;
+  }
+  return `${seconds} second${seconds !== 1 ? 's' : ''}`;
+}
+
+async function main() {
+  const { dbPath } = parseArgs();
+  
+  console.log('=== MemoryLane Database Statistics ===\n');
+  console.log(`Database path: ${dbPath}`);
+  
+  // Check if database exists
+  if (!fs.existsSync(dbPath)) {
+    console.log('\nDatabase not found.');
+    console.log('Make sure the MemoryLane app has run and captured some data.');
+    process.exit(1);
+  }
+  
+  // Get disk size
+  const diskSize = getDirectorySize(dbPath);
+  console.log(`Database size: ${formatBytes(diskSize)}`);
+  console.log('');
+  
+  try {
+    // Initialize storage service
+    const storageService = new StorageService(dbPath);
+    await storageService.init();
+    
+    // Get row count
+    const count = await storageService.countRows();
+    console.log(`Total entries: ${count.toLocaleString()}`);
+    
+    if (count === 0) {
+      console.log('\nNo entries in database yet.');
+      await storageService.close();
+      return;
+    }
+    
+    // Get date range
+    const dateRange = await storageService.getDateRange();
+    
+    if (dateRange.oldest && dateRange.newest) {
+      console.log('');
+      console.log('Date range:');
+      console.log(`  Oldest: ${formatTimestamp(dateRange.oldest)}`);
+      console.log(`  Newest: ${formatTimestamp(dateRange.newest)}`);
+      
+      const duration = dateRange.newest - dateRange.oldest;
+      console.log(`  Span:   ${formatDuration(duration)}`);
+      
+      // Calculate capture rate
+      if (duration > 0) {
+        const capturesPerHour = (count / (duration / (1000 * 60 * 60))).toFixed(1);
+        console.log(`  Rate:   ~${capturesPerHour} captures/hour`);
+      }
+    }
+    
+    await storageService.close();
+    
+  } catch (error) {
+    console.error('\nError:', error instanceof Error ? error.message : error);
+    process.exit(1);
+  }
+}
+
+main();

@@ -34,16 +34,16 @@ Add a minimal MCP server to MemoryLane that exposes one `search_context` tool, p
 
 ---
 
-### 2. CLI Tooling: Database Stats Command
+### 2. CLI Tooling: Database Stats Command ✅
 
 **Summary**: Add a command to show database statistics.
 
 **Why**: Useful for understanding what's in the database without running searches.
 
 **Acceptance Criteria**:
-- [ ] Script can be run via `npm run db:stats`
-- [ ] Shows: total entry count, date range (oldest to newest), database size on disk
-- [ ] Works with the production database path
+- [x] Script can be run via `npm run db:stats`
+- [x] Shows: total entry count, date range (oldest to newest), database size on disk
+- [x] Works with the production database path
 
 **Technical Notes**:
 - Add to existing CLI or create `scripts/db-stats.ts`

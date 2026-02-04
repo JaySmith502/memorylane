@@ -171,6 +171,68 @@ export class StorageService {
   }
 
   /**
+   * Returns the total number of events in the database.
+   */
+  public async countRows(): Promise<number> {
+    if (!this.tableInstance) {
+      await this.init();
+    }
+    
+    if (!this.tableInstance) return 0;
+    
+    return await this.tableInstance.countRows();
+  }
+
+  /**
+   * Returns the date range (oldest and newest timestamps) in the database.
+   */
+  public async getDateRange(): Promise<{ oldest: number | null; newest: number | null }> {
+    if (!this.tableInstance) {
+      await this.init();
+    }
+    
+    if (!this.tableInstance) return { oldest: null, newest: null };
+    
+    // Get oldest entry
+    const oldestResults = await this.tableInstance
+      .query()
+      .select(['timestamp'])
+      .limit(1)
+      .toArray();
+    
+    // Get newest entry  
+    const newestResults = await this.tableInstance
+      .query()
+      .select(['timestamp'])
+      .limit(1)
+      .toArray();
+    
+    // LanceDB doesn't have ORDER BY in the simple query API, so we need to scan
+    // For better performance with large datasets, consider adding an index
+    const allTimestamps = await this.tableInstance
+      .query()
+      .select(['timestamp'])
+      .toArray();
+    
+    if (allTimestamps.length === 0) {
+      return { oldest: null, newest: null };
+    }
+    
+    const timestamps = allTimestamps.map(r => r.timestamp as number);
+    return {
+      oldest: Math.min(...timestamps),
+      newest: Math.max(...timestamps)
+    };
+  }
+
+  /**
+   * Returns the database path.
+   */
+  public getDbPath(): string {
+    return this.dbPath;
+  }
+
+  /**
    * Closes the connection (mostly for cleanup/testing).
    */
   public async close(): Promise<void> {
