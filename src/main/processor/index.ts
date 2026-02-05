@@ -91,15 +91,17 @@ export class EventProcessor {
 
           // 3. Store START screenshot's data (OCR + summary)
           const vector = await this.embeddingService.generateEmbedding(this.startOcrText);
+          const appName = this.extractAppName(allEvents);
           const storedEvent: StoredEvent = {
             id: this.startScreenshot.id,
             timestamp: this.startScreenshot.timestamp,
             text: this.startOcrText,
             summary,
+            appName,
             vector
           };
           await this.storageService.addEvent(storedEvent);
-          console.log(`[EventProcessor] Stored event for ${this.startScreenshot.id}`);
+          console.log(`[EventProcessor] Stored event for ${this.startScreenshot.id} (app: ${appName})`);
 
           // Delete START screenshot (classification done, no longer needed)
           this.deleteScreenshot(this.startScreenshot.filepath);
@@ -112,15 +114,17 @@ export class EventProcessor {
       } else {
         // No classifier - store OCR only with empty summary, then delete
         const vector = await this.embeddingService.generateEmbedding(text);
+        const appName = this.extractAppName(events);
         const storedEvent: StoredEvent = {
           id,
           timestamp,
           text,
           summary: '',
+          appName,
           vector
         };
         await this.storageService.addEvent(storedEvent);
-        console.log(`[EventProcessor] Stored event for ${id} (no classifier)`);
+        console.log(`[EventProcessor] Stored event for ${id} (no classifier, app: ${appName})`);
         this.deleteScreenshot(filepath);
       }
       
@@ -128,6 +132,21 @@ export class EventProcessor {
       console.error(`Error processing screenshot ${id}:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Extract the app name from interaction events.
+   * Looks for the most recent event with activeWindow info.
+   */
+  private extractAppName(events: InteractionContext[]): string {
+    // Iterate backwards to find the most recent event with activeWindow
+    for (let i = events.length - 1; i >= 0; i--) {
+      const event = events[i];
+      if (event.activeWindow?.processName) {
+        return event.activeWindow.processName;
+      }
+    }
+    return '';
   }
 
   /**

@@ -7,6 +7,7 @@ export interface StoredEvent extends Record<string, unknown> {
   timestamp: number;
   text: string;       // OCR extracted text
   summary: string;    // LLM-generated activity summary
+  appName: string;    // Active app (e.g., "VS Code", "Chrome")
   vector: number[];
 }
 
@@ -210,6 +211,55 @@ export class StorageService {
       oldest: Math.min(...timestamps),
       newest: Math.max(...timestamps)
     };
+  }
+
+  /**
+   * Lightweight event type for time-based queries (no vector/text).
+   */
+  public async getEventsByTimeRange(
+    startTime: number | null = null,
+    endTime: number | null = null,
+    options?: { includeText?: boolean }
+  ): Promise<Omit<StoredEvent, 'vector'>[]> {
+    if (!this.tableInstance) {
+      await this.init();
+    }
+
+    if (!this.tableInstance) return [];
+
+    const includeText = options?.includeText ?? false;
+    const selectFields = includeText
+      ? ['id', 'timestamp', 'summary', 'appName', 'text']
+      : ['id', 'timestamp', 'summary', 'appName'];
+
+    
+
+    let query = this.tableInstance.query().select(selectFields);
+
+    // Build where clause only for provided time bounds
+    const conditions: string[] = [];
+    if (startTime !== null) {
+      conditions.push(`timestamp >= ${startTime}`);
+    }
+    if (endTime !== null) {
+      conditions.push(`timestamp <= ${endTime}`);
+    }
+    if (conditions.length > 0) {
+      query = query.where(conditions.join(' AND '));
+    }
+
+    const results = await query.toArray();
+
+    // Sort by timestamp ascending
+    const sorted = results.sort((a, b) => (a.timestamp as number) - (b.timestamp as number));
+
+    return sorted.map(record => ({
+      id: record.id as string,
+      timestamp: record.timestamp as number,
+      summary: record.summary as string,
+      appName: record.appName as string,
+      text: includeText ? (record.text as string) : '',
+    }));
   }
 
   /**
