@@ -37,27 +37,36 @@ async function loadKeyStatus(): Promise<void> {
 }
 
 function updateStatusDisplay(status: KeyStatus): void {
-  statusDiv.className = 'status ' + status.source;
+  const baseClasses = 'mb-4 p-3 rounded-lg text-sm font-medium flex items-center gap-2';
 
   if (status.source === 'stored') {
-    statusDiv.textContent = `API key is securely stored: ${status.maskedKey}`;
+    statusDiv.className = `${baseClasses} bg-zinc-700/50 text-zinc-200 border border-zinc-600`;
+    statusDiv.textContent = `Stored: ${status.maskedKey}`;
     deleteButton.disabled = false;
   } else if (status.source === 'env') {
-    statusDiv.textContent = `Using key from environment variable: ${status.maskedKey}`;
+    statusDiv.className = `${baseClasses} bg-zinc-700/50 text-zinc-200 border border-zinc-600`;
+    statusDiv.textContent = `Environment: ${status.maskedKey}`;
     deleteButton.disabled = true;
   } else {
-    statusDiv.textContent = 'No API key configured';
+    statusDiv.className = `${baseClasses} bg-zinc-800/50 text-zinc-400 border border-zinc-700/50`;
+    statusDiv.textContent = 'No key configured';
     deleteButton.disabled = true;
   }
 }
 
 function showMessage(text: string, type: 'success' | 'error'): void {
   messageDiv.textContent = text;
-  messageDiv.className = 'message ' + type;
+  const baseClasses = 'mt-3 text-sm font-medium min-h-[20px]';
+  
+  if (type === 'success') {
+    messageDiv.className = `${baseClasses} text-zinc-300`;
+  } else {
+    messageDiv.className = `${baseClasses} text-zinc-400`;
+  }
 
   setTimeout(() => {
     messageDiv.textContent = '';
-    messageDiv.className = 'message';
+    messageDiv.className = baseClasses;
   }, 3000);
 }
 

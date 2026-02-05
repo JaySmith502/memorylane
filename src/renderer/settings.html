@@ -8,28 +8,14 @@
   <link rel="stylesheet" href="./settings.css">
 </head>
 <body class="bg-zinc-900 text-zinc-100 min-h-screen antialiased">
-  <div class="p-6 max-w-lg mx-auto">
-    <!-- Header -->
-    <div class="mb-6">
-      <h1 class="text-xl font-semibold text-white">Settings</h1>
-      <p class="text-sm text-zinc-400 mt-1">Configure your MemoryLane preferences</p>
-    </div>
-
+  <div class="p-8 max-w-lg mx-auto">
     <!-- API Key Section -->
-    <section class="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-5">
-      <div class="flex items-start gap-3 mb-4">
-        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center flex-shrink-0">
-          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-          </svg>
-        </div>
-        <div>
-          <h2 class="text-base font-medium text-white">OpenRouter API Key</h2>
-          <p class="text-sm text-zinc-400 mt-0.5">
-            Required for LLM-based activity classification.
-            <a href="https://openrouter.ai/" id="get-key-link" class="text-violet-400 hover:text-violet-300 transition-colors">Get your key &rarr;</a>
-          </p>
-        </div>
+    <section class="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-6">
+      <div class="mb-4">
+        <h1 class="text-lg font-medium text-white">API Key</h1>
+        <p class="text-sm text-zinc-400 mt-1">
+          Required for activity classification.
+        </p>
       </div>
 
       <!-- Status Badge -->
@@ -43,7 +29,7 @@
             id="api-key-input"
             placeholder="sk-or-v1-..."
             autocomplete="off"
-            class="w-full px-4 py-3 bg-zinc-900/50 border border-zinc-600 rounded-lg text-zinc-100 font-mono text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-all"
+            class="w-full px-4 py-3 bg-zinc-900/50 border border-zinc-600 rounded-lg text-zinc-100 font-mono text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500 focus:border-zinc-500 transition-all"
           >
           <button
             type="button"
@@ -60,9 +46,9 @@
           <button
             type="button"
             id="save-button"
-            class="flex-1 px-4 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:bg-violet-600/50 text-white font-medium rounded-lg transition-all disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+            class="flex-1 px-4 py-2.5 bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-700/50 text-white font-medium rounded-lg transition-all disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-zinc-500"
           >
-            Save Key
+            Save
           </button>
           <button
             type="button"
