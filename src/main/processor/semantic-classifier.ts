@@ -4,24 +4,51 @@ import { ClassificationInput, ClassificationResult, InteractionContext } from '.
 
 export class SemanticClassifierService {
   private summaryHistory: ClassificationResult[] = [];
-  private client: OpenRouter;
+  private client: OpenRouter | null = null;
   private model: string;
   private maxHistorySize: number;
 
   constructor(apiKey?: string, model = 'mistralai/mistral-small-3.2-24b-instruct', maxHistorySize = 5) {
     const key = apiKey || process.env.OPENROUTER_API_KEY;
-    if (!key) {
-      throw new Error('OPENROUTER_API_KEY environment variable is required');
+    if (key) {
+      this.client = new OpenRouter({ apiKey: key });
+      console.log('[SemanticClassifier] Initialized with API key');
+    } else {
+      console.warn('[SemanticClassifier] No API key provided - classification disabled');
     }
-    this.client = new OpenRouter({ apiKey: key });
     this.model = model;
     this.maxHistorySize = maxHistorySize;
+  }
+
+  /**
+   * Check if the classifier is configured with an API key
+   */
+  public isConfigured(): boolean {
+    return this.client !== null;
+  }
+
+  /**
+   * Update the API key at runtime
+   */
+  public updateApiKey(apiKey: string | null): void {
+    if (apiKey) {
+      this.client = new OpenRouter({ apiKey });
+      console.log('[SemanticClassifier] API key updated');
+    } else {
+      this.client = null;
+      console.log('[SemanticClassifier] API key cleared');
+    }
   }
 
   /**
    * Classify user activity between two screenshots with events
    */
   public async classify(input: ClassificationInput): Promise<string> {
+    if (!this.client) {
+      console.log('[SemanticClassifier] Skipping classification - no API key configured');
+      return '';
+    }
+
     const { startScreenshot, endScreenshot, events } = input;
 
     try {

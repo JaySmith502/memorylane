@@ -26,6 +26,8 @@ import { EventProcessor } from './processor/index';
 import { EmbeddingService } from './processor/embedding';
 import { StorageService } from './processor/storage';
 import { SemanticClassifierService } from './processor/semantic-classifier';
+import { ApiKeyManager } from './settings/api-key-manager';
+import { initSettingsIPC, openSettingsWindow } from './settings/settings-window';
 import { Screenshot } from '../shared/types';
 import dotenv from 'dotenv';
 
@@ -46,26 +48,29 @@ if (isMCPMode) {
   // MCP SERVER MODE
   // ============================================
   // Headless mode - no tray, no recorder, just search services
-  
+
   app.on('ready', async () => {
     console.log('[MCP Mode] Starting MemoryLane MCP Server...');
-    
+
     try {
+      // Initialize API key manager for secure key storage
+      const apiKeyManager = new ApiKeyManager();
+
       // Initialize only the services needed for search
       const embeddingService = new EmbeddingService();
       const storageService = new StorageService(StorageService.getDefaultDbPath());
-      const classifierService = new SemanticClassifierService();
+      const classifierService = new SemanticClassifierService(apiKeyManager.getApiKey() || undefined);
       const processor = new EventProcessor(embeddingService, storageService, classifierService);
-      
+
       console.log('[MCP Mode] Services initialized');
-      
+
       // Dynamically import MCP server to avoid loading it in recorder mode
       const { MemoryLaneMCPServer } = await import('./mcp/server');
       const mcpServer = new MemoryLaneMCPServer(processor);
-      
+
       // Start the server (this will use stdio transport)
       await mcpServer.start();
-      
+
       console.log('[MCP Mode] MCP Server started successfully');
     } catch (error) {
       console.error('[MCP Mode] Fatal error starting MCP server:', error);
@@ -84,19 +89,26 @@ if (isMCPMode) {
   // This avoids loading heavy modules (OCR, interaction monitor) in MCP mode
   let recorder: typeof import('./recorder/recorder');
   let interactionMonitor: typeof import('./recorder/interaction-monitor');
-  
+
   let tray: Tray | null = null;
   let processor: EventProcessor | null = null;
+  let apiKeyManager: ApiKeyManager | null = null;
 
   const initRecorderMode = async () => {
     // Dynamic imports for recorder-specific modules
     recorder = await import('./recorder/recorder');
     interactionMonitor = await import('./recorder/interaction-monitor');
-    
+
+    // Initialize API key manager for secure key storage
+    apiKeyManager = new ApiKeyManager();
+
+    // Initialize settings IPC handlers
+    initSettingsIPC(apiKeyManager);
+
     // Initialize Processor Services
     const embeddingService = new EmbeddingService();
     const storageService = new StorageService(StorageService.getDefaultDbPath());
-    const classifierService = new SemanticClassifierService();
+    const classifierService = new SemanticClassifierService(apiKeyManager.getApiKey() || undefined);
     processor = new EventProcessor(embeddingService, storageService, classifierService);
   };
 
@@ -188,27 +200,34 @@ if (isMCPMode) {
             console.error('[Test Search] Processor not initialized');
             return;
           }
-          
+
           try {
             console.log('[Test Search] Starting search for "MemoryLane"...');
             const results = await processor.search('MemoryLane');
-            
+
             console.log('\n=== FTS Results ===');
             results.fts.forEach((event, idx) => {
               console.log(`${idx + 1}. [${event.id}] ${new Date(event.timestamp).toISOString()}`);
               console.log(`   Text: ${event.text.substring(0, 100)}${event.text.length > 100 ? '...' : ''}`);
             });
-            
+
             console.log('\n=== Vector Results ===');
             results.vector.forEach((event, idx) => {
               console.log(`${idx + 1}. [${event.id}] ${new Date(event.timestamp).toISOString()}`);
               console.log(`   Text: ${event.text.substring(0, 100)}${event.text.length > 100 ? '...' : ''}`);
             });
-            
+
             console.log('\n[Test Search] Complete\n');
           } catch (error) {
             console.error('[Test Search] Error:', error);
           }
+        },
+      },
+      { type: 'separator' },
+      {
+        label: 'Settings...',
+        click: () => {
+          openSettingsWindow();
         },
       },
       { type: 'separator' },
