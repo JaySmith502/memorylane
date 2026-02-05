@@ -53,6 +53,7 @@
     "apache-arrow": "^18.1.0",
     "color-name": "^1.1.4",
     "dotenv": "^17.2.3",
+    "electron-log": "^5.4.3",
     "sharp": "^0.34.5",
     "uiohook-napi": "^1.5.4",
     "uuid": "^13.0.0"
