@@ -9,15 +9,10 @@
 // Detect MCP mode FIRST, before any heavy imports
 const isMCPMode = process.argv.includes('--mcp');
 
-// In MCP mode, redirect console.log to stderr immediately
-// MCP protocol requires stdout to be used ONLY for JSON-RPC messages
+import log, { configureMCPMode } from './logger';
+
 if (isMCPMode) {
-  const originalLog = console.log.bind(console);
-  console.log = (...args: unknown[]) => {
-    console.error(...args);
-  };
-  // Keep a reference to write to stdout if needed (for debugging only)
-  (console as unknown as { _originalLog: typeof originalLog })._originalLog = originalLog;
+  configureMCPMode();
 }
 
 import { app, Tray, Menu, nativeImage } from 'electron';
@@ -55,7 +50,7 @@ if (isMCPMode) {
   // Headless mode - no tray, no recorder, just search services
 
   app.on('ready', async () => {
-    console.log('[MCP Mode] Starting MemoryLane MCP Server...');
+    log.info('[MCP Mode] Starting MemoryLane MCP Server...');
 
     try {
       // Initialize API key manager for secure key storage
@@ -67,7 +62,7 @@ if (isMCPMode) {
       const classifierService = new SemanticClassifierService(apiKeyManager.getApiKey() || undefined);
       const processor = new EventProcessor(embeddingService, storageService, classifierService);
 
-      console.log('[MCP Mode] Services initialized');
+      log.info('[MCP Mode] Services initialized');
 
       // Dynamically import MCP server to avoid loading it in recorder mode
       const { MemoryLaneMCPServer } = await import('./mcp/server');
@@ -76,9 +71,9 @@ if (isMCPMode) {
       // Start the server (this will use stdio transport)
       await mcpServer.start();
 
-      console.log('[MCP Mode] MCP Server started successfully');
+      log.info('[MCP Mode] MCP Server started successfully');
     } catch (error) {
-      console.error('[MCP Mode] Fatal error starting MCP server:', error);
+      log.error('[MCP Mode] Fatal error starting MCP server:', error);
       app.quit();
       process.exit(1);
     }
@@ -153,16 +148,16 @@ if (isMCPMode) {
 
     // Register a callback to process screenshots
     recorder.onScreenshot(async (screenshot: Screenshot) => {
-      console.log(`[Main] Screenshot captured: ${screenshot.id}`);
+      log.info(`[Main] Screenshot captured: ${screenshot.id}`);
 
       if (processor) {
         try {
           await processor.processScreenshot(screenshot);
-          console.log(`[Main] Screenshot processed successfully: ${screenshot.id}`);
+          log.info(`[Main] Screenshot processed successfully: ${screenshot.id}`);
           // Refresh tray menu to show updated usage stats
           void updateTrayMenu();
         } catch (error) {
-          console.error(`[Main] Error processing screenshot ${screenshot.id}:`, error);
+          log.error(`[Main] Error processing screenshot ${screenshot.id}:`, error);
         }
       }
     });
@@ -247,7 +242,7 @@ if (isMCPMode) {
         }
       );
     } catch (error) {
-      console.error('Error fetching storage stats:', error);
+      log.error('Error fetching storage stats:', error);
       submenu.push({
         label: 'Storage stats unavailable',
         enabled: false
@@ -276,8 +271,8 @@ if (isMCPMode) {
             try {
               interactionMonitor.startInteractionMonitoring();
             } catch (error) {
-              console.error('Failed to start interaction monitoring:', error);
-              console.log('Continuing without interaction monitoring');
+              log.error('Failed to start interaction monitoring:', error);
+              log.info('Continuing without interaction monitoring');
             }
           }
           void updateTrayMenu();
@@ -288,9 +283,9 @@ if (isMCPMode) {
         click: async () => {
           try {
             const screenshot = await recorder.captureNow();
-            console.log('Manual capture successful:', screenshot.id);
+            log.info('Manual capture successful:', screenshot.id);
           } catch (error) {
-            console.error('Manual capture failed:', error);
+            log.error('Manual capture failed:', error);
           }
         },
       },
@@ -298,29 +293,29 @@ if (isMCPMode) {
         label: 'Test Search: "MemoryLane"',
         click: async () => {
           if (!processor) {
-            console.error('[Test Search] Processor not initialized');
+            log.error('[Test Search] Processor not initialized');
             return;
           }
 
           try {
-            console.log('[Test Search] Starting search for "MemoryLane"...');
+            log.info('[Test Search] Starting search for "MemoryLane"...');
             const results = await processor.search('MemoryLane');
 
-            console.log('\n=== FTS Results ===');
+            log.info('\n=== FTS Results ===');
             results.fts.forEach((event, idx) => {
-              console.log(`${idx + 1}. [${event.id}] ${new Date(event.timestamp).toISOString()}`);
-              console.log(`   Text: ${event.text.substring(0, 100)}${event.text.length > 100 ? '...' : ''}`);
+              log.info(`${idx + 1}. [${event.id}] ${new Date(event.timestamp).toISOString()}`);
+              log.info(`   Text: ${event.text.substring(0, 100)}${event.text.length > 100 ? '...' : ''}`);
             });
 
-            console.log('\n=== Vector Results ===');
+            log.info('\n=== Vector Results ===');
             results.vector.forEach((event, idx) => {
-              console.log(`${idx + 1}. [${event.id}] ${new Date(event.timestamp).toISOString()}`);
-              console.log(`   Text: ${event.text.substring(0, 100)}${event.text.length > 100 ? '...' : ''}`);
+              log.info(`${idx + 1}. [${event.id}] ${new Date(event.timestamp).toISOString()}`);
+              log.info(`   Text: ${event.text.substring(0, 100)}${event.text.length > 100 ? '...' : ''}`);
             });
 
-            console.log('\n[Test Search] Complete\n');
+            log.info('\n[Test Search] Complete\n');
           } catch (error) {
-            console.error('[Test Search] Error:', error);
+            log.error('[Test Search] Error:', error);
           }
         },
       },
@@ -353,6 +348,6 @@ if (isMCPMode) {
   app.on('ready', async () => {
     await initRecorderMode();
     createTray();
-    console.log('MemoryLane started. Screenshots will be saved to:', recorder.getScreenshotsDir());
+    log.info('MemoryLane started. Screenshots will be saved to:', recorder.getScreenshotsDir());
   });
 }
