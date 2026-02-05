@@ -1,5 +1,6 @@
 import * as lancedb from '@lancedb/lancedb';
 import * as fs from 'fs';
+import * as path from 'path';
 import { getDefaultDbPath } from '../paths';
 import { SearchFilters } from '../../shared/types';
 
@@ -378,6 +379,34 @@ export class StorageService {
    */
   public getDbPath(): string {
     return this.dbPath;
+  }
+
+  /**
+   * Returns the total size of the database directory in bytes.
+   */
+  public getDbSize(): number {
+    if (!fs.existsSync(this.dbPath)) return 0;
+    
+    const getDirectorySize = (dirPath: string): number => {
+      let totalSize = 0;
+      
+      const items = fs.readdirSync(dirPath);
+      
+      for (const item of items) {
+        const itemPath = path.join(dirPath, item);
+        const stats = fs.statSync(itemPath);
+        
+        if (stats.isDirectory()) {
+          totalSize += getDirectorySize(itemPath);
+        } else {
+          totalSize += stats.size;
+        }
+      }
+      
+      return totalSize;
+    };
+    
+    return getDirectorySize(this.dbPath);
   }
 
   /**

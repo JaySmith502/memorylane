@@ -1,14 +1,32 @@
 import * as fs from 'fs';
 import { OpenRouter } from '@openrouter/sdk';
 import { ClassificationInput, ClassificationResult, InteractionContext } from '../../shared/types';
+import { UsageTracker } from '../services/usage-tracker';
+
+const MODEL_CHOICES: string[] = [
+  'mistralai/mistral-small-3.2-24b-instruct',
+];
+
+interface ModelCost {
+  input_tokens_per_million: number;
+  completion_tokens_per_million: number;
+}
+
+const MODEL_COSTS: Record<string, ModelCost> = {
+  'mistralai/mistral-small-3.2-24b-instruct': {
+    input_tokens_per_million: 0.06,
+    completion_tokens_per_million: 0.18,
+  }
+}
 
 export class SemanticClassifierService {
   private summaryHistory: ClassificationResult[] = [];
   private client: OpenRouter | null = null;
   private model: string;
   private maxHistorySize: number;
+  private usageTracker: UsageTracker;
 
-  constructor(apiKey?: string, model = 'mistralai/mistral-small-3.2-24b-instruct', maxHistorySize = 5) {
+  constructor(apiKey?: string, model = 'mistralai/mistral-small-3.2-24b-instruct', maxHistorySize = 5, usageTracker?: UsageTracker) {
     const key = apiKey || process.env.OPENROUTER_API_KEY;
     if (key) {
       this.client = new OpenRouter({ apiKey: key });
@@ -18,6 +36,7 @@ export class SemanticClassifierService {
     }
     this.model = model;
     this.maxHistorySize = maxHistorySize;
+    this.usageTracker = usageTracker || new UsageTracker();
   }
 
   /**
@@ -95,6 +114,18 @@ export class SemanticClassifierService {
       const messageContent = response.choices?.[0]?.message?.content;
       const summary = typeof messageContent === 'string' ? messageContent.trim() : 'No summary generated';
       console.log(`[SemanticClassifier] Summary: ${summary}`);
+
+      if (response.usage) {
+        const promptTokens = response.usage.promptTokens || 0;
+        const completionTokens = response.usage.completionTokens || 0;
+        const cost = (promptTokens / 1_000_000) * MODEL_COSTS[this.model].input_tokens_per_million + (completionTokens / 1_000_000) * MODEL_COSTS[this.model].completion_tokens_per_million;
+        this.usageTracker.recordUsage({
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          cost: cost,
+        });
+        console.log(`[SemanticClassifier] Usage tracked - Tokens: ${response.usage.promptTokens}/${response.usage.completionTokens}, Cost: $${((response.usage as any).cost)?.toFixed(4) || 0}`);
+      }
 
       // Store in history
       const result: ClassificationResult = {
@@ -218,5 +249,12 @@ export class SemanticClassifierService {
    */
   public getSummaryHistory(): ClassificationResult[] {
     return [...this.summaryHistory];
+  }
+
+  /**
+   * Get the usage tracker instance
+   */
+  public getUsageTracker(): UsageTracker {
+    return this.usageTracker;
   }
 }

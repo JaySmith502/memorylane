@@ -134,7 +134,7 @@ if (isMCPMode) {
     tray = new Tray(icon);
     tray.setToolTip('MemoryLane - Screen Capture');
 
-    updateTrayMenu();
+    void updateTrayMenu();
 
     // Register a callback to process screenshots
     recorder.onScreenshot(async (screenshot: Screenshot) => {
@@ -158,10 +158,94 @@ if (isMCPMode) {
     });
   };
 
-  const updateTrayMenu = () => {
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const formatNumber = (num: number): string => {
+    return num.toLocaleString();
+  };
+
+  const buildUsageStatsSubmenu = async (): Promise<Electron.MenuItemConstructorOptions[]> => {
+    const submenu: Electron.MenuItemConstructorOptions[] = [];
+
+    if (!processor) {
+      submenu.push({
+        label: 'Stats not available',
+        enabled: false
+      });
+      return submenu;
+    }
+
+    const classifier = processor.getClassifierService();
+    const storage = processor.getStorageService();
+
+    if (classifier) {
+      const usageTracker = classifier.getUsageTracker();
+      const stats = usageTracker.getStats();
+
+      submenu.push(
+        {
+          label: `API Requests: ${formatNumber(stats.requestCount)}`,
+          enabled: false
+        },
+        {
+          label: `Tokens: ${formatNumber(stats.promptTokens)} (prompt) / ${formatNumber(stats.completionTokens)} (completion)`,
+          enabled: false
+        },
+        {
+          label: `Est. Cost: $${stats.totalCost.toFixed(4)}`,
+          enabled: false
+        }
+      );
+    } else {
+      submenu.push(
+        {
+          label: 'API tracking unavailable (no API key)',
+          enabled: false
+        }
+      );
+    }
+
+    submenu.push({ type: 'separator' });
+
+    try {
+      const screenshotCount = await storage.countRows();
+      const dbSize = storage.getDbSize();
+
+      submenu.push(
+        {
+          label: `Screenshots: ${formatNumber(screenshotCount)}`,
+          enabled: false
+        },
+        {
+          label: `Database: ${formatBytes(dbSize)}`,
+          enabled: false
+        }
+      );
+    } catch (error) {
+      console.error('Error fetching storage stats:', error);
+      submenu.push({
+        label: 'Storage stats unavailable',
+        enabled: false
+      });
+    }
+
+    return submenu;
+  };
+
+  const updateTrayMenu = async () => {
     if (!tray) return;
 
     const isCapturing = recorder.isCapturingNow();
+
+    const usageStatsSubmenu = await buildUsageStatsSubmenu();
 
     const contextMenu = Menu.buildFromTemplate([
       {
@@ -179,7 +263,7 @@ if (isMCPMode) {
               console.log('Continuing without interaction monitoring');
             }
           }
-          updateTrayMenu();
+          void updateTrayMenu();
         },
       },
       {
@@ -224,6 +308,10 @@ if (isMCPMode) {
         },
       },
       { type: 'separator' },
+      {
+        label: 'Usage Stats',
+        submenu: usageStatsSubmenu
+      },
       {
         label: 'Settings...',
         click: () => {

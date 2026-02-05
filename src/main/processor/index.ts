@@ -189,4 +189,18 @@ export class EventProcessor {
 
     return { fts: ftsResults, vector: vectorResults };
   }
+
+  /**
+   * Get the storage service instance
+   */
+  public getStorageService(): StorageService {
+    return this.storageService;
+  }
+
+  /**
+   * Get the classifier service instance
+   */
+  public getClassifierService(): SemanticClassifierService | null {
+    return this.classifierService;
+  }
 }
