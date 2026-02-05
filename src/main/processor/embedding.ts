@@ -1,4 +1,5 @@
 import { pipeline, env } from '@xenova/transformers';
+import log from '../logger';
 
 // Configure environment to not use local file system for models if possible,
 // or set a valid cache directory. For Electron, we want to ensure we don't
@@ -20,9 +21,9 @@ export class EmbeddingService {
   public async init(): Promise<void> {
     if (this.pipe) return;
     
-    console.log(`Loading embedding model: ${MODEL_NAME}`);
+    log.info(`Loading embedding model: ${MODEL_NAME}`);
     this.pipe = await pipeline('feature-extraction', MODEL_NAME);
-    console.log('Embedding model loaded.');
+    log.info('Embedding model loaded.');
   }
 
   /**

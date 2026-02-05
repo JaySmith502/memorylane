@@ -4,6 +4,7 @@ import { EmbeddingService } from './embedding';
 import { StorageService, StoredEvent } from './storage';
 import { Screenshot, InteractionContext, SearchOptions, SearchFilters } from '../../shared/types';
 import { SemanticClassifierService } from './semantic-classifier';
+import log from '../logger';
 
 export class EventProcessor {
   private embeddingService: EmbeddingService;
@@ -49,18 +50,18 @@ export class EventProcessor {
     // Grab pending events and reset for next screenshot
     const events = [...this.pendingEvents];
     this.pendingEvents = [];
-    console.log(`[EventProcessor] Processing screenshot ${id} with ${events.length} accumulated events`);
-    console.log(`[EventProcessor] Events: ${JSON.stringify(events)}`);
+    log.info(`[EventProcessor] Processing screenshot ${id} with ${events.length} accumulated events`);
+    log.info(`[EventProcessor] Events: ${JSON.stringify(events)}`);
     
     try {
       // 1. OCR - needs the file to exist
       if (!fs.existsSync(filepath)) {
-          console.warn(`File not found for screenshot ${id}: ${filepath}`);
+          log.warn(`File not found for screenshot ${id}: ${filepath}`);
           return;
       }
 
       const text = await extractText(filepath);
-      console.log(`[EventProcessor] OCR complete for ${id}. Text length: ${text.length}`);
+      log.info(`[EventProcessor] OCR complete for ${id}. Text length: ${text.length}`);
 
       // 2. Semantic Classification (START/END pair tracking)
       if (this.classifierService) {
@@ -73,7 +74,7 @@ export class EventProcessor {
 
           if (appChanged) {
             // App change: use single-image classification for START only
-            console.log(`[EventProcessor] App change detected, using single-image classification`);
+            log.info(`[EventProcessor] App change detected, using single-image classification`);
             const summary = await this.runClassification(this.startScreenshot, undefined, this.startEvents);
             await this.storeAndCleanup(this.startScreenshot, this.startOcrText, summary, this.startEvents, 'app change, single-image');
           } else {
@@ -92,7 +93,7 @@ export class EventProcessor {
       }
       
     } catch (error) {
-      console.error(`Error processing screenshot ${id}:`, error);
+      log.error(`Error processing screenshot ${id}:`, error);
       throw error;
     }
   }
@@ -105,9 +106,9 @@ export class EventProcessor {
     endScreenshot: Screenshot | undefined,
     events: InteractionContext[]
   ): Promise<string> {
-    console.log(`[EventProcessor] START screenshot: ${startScreenshot.id}`);
+    log.info(`[EventProcessor] START screenshot: ${startScreenshot.id}`);
     if (endScreenshot) {
-      console.log(`[EventProcessor] END screenshot: ${endScreenshot.id}`);
+      log.info(`[EventProcessor] END screenshot: ${endScreenshot.id}`);
     }
 
     try {
@@ -116,10 +117,10 @@ export class EventProcessor {
         endScreenshot,
         events,
       });
-      console.log(`[EventProcessor] Classification summary: ${summary}`);
+      log.info(`[EventProcessor] Classification summary: ${summary}`);
       return summary;
     } catch (error) {
-      console.error('[EventProcessor] Classification failed:', error);
+      log.error('[EventProcessor] Classification failed:', error);
       return 'Classification failed';
     }
   }
@@ -147,7 +148,7 @@ export class EventProcessor {
     await this.storageService.addEvent(storedEvent);
     
     const suffix = logSuffix ? ` (${logSuffix}, app: ${appName})` : ` (app: ${appName})`;
-    console.log(`[EventProcessor] Stored event for ${screenshot.id}${suffix}`);
+    log.info(`[EventProcessor] Stored event for ${screenshot.id}${suffix}`);
     
     this.deleteScreenshot(screenshot.filepath);
   }
@@ -195,10 +196,10 @@ export class EventProcessor {
     try {
       if (fs.existsSync(filepath)) {
         fs.unlinkSync(filepath);
-        console.log(`[EventProcessor] Deleted screenshot: ${filepath}`);
+        log.info(`[EventProcessor] Deleted screenshot: ${filepath}`);
       }
     } catch (error) {
-      console.error(`[EventProcessor] Failed to delete screenshot ${filepath}:`, error);
+      log.error(`[EventProcessor] Failed to delete screenshot ${filepath}:`, error);
     }
   }
 
@@ -212,18 +213,18 @@ export class EventProcessor {
     const { limit = 5, startTime, endTime, appName } = options;
     const filters: SearchFilters = { startTime, endTime, appName };
 
-    console.log(`[Search] Query: "${query}" (Limit: ${limit}, Filters: ${JSON.stringify(filters)})`);
+    log.info(`[Search] Query: "${query}" (Limit: ${limit}, Filters: ${JSON.stringify(filters)})`);
 
     // 1. Generate embedding for vector search
     const queryVector = await this.embeddingService.generateEmbedding(query);
 
     // 2. Vector search with filters
     const vectorResults = await this.storageService.searchVectorsWithFilters(queryVector, limit, filters);
-    console.log(`[Search] Vector results: ${vectorResults.length}`);
+    log.info(`[Search] Vector results: ${vectorResults.length}`);
 
     // 3. FTS search with filters
     const ftsResults = await this.storageService.searchFTSWithFilters(query, limit, filters);
-    console.log(`[Search] FTS results: ${ftsResults.length}`);
+    log.info(`[Search] FTS results: ${ftsResults.length}`);
 
     return { fts: ftsResults, vector: vectorResults };
   }

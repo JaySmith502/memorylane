@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getDefaultDbPath } from '../paths';
 import { SearchFilters } from '../../shared/types';
+import log from '../logger';
 
 export interface StoredEvent extends Record<string, unknown> {
   id: string;
@@ -41,7 +42,7 @@ export class StorageService {
       fs.mkdirSync(this.dbPath, { recursive: true });
     }
 
-    console.log(`Initializing LanceDB at: ${this.dbPath}`);
+    log.info(`Initializing LanceDB at: ${this.dbPath}`);
     this.dbInstance = await lancedb.connect(this.dbPath);
     
     // Check if table exists
@@ -49,7 +50,7 @@ export class StorageService {
     if (tableNames.includes(this.TABLE_NAME)) {
       this.tableInstance = await this.dbInstance.openTable(this.TABLE_NAME);
     } else {
-      console.log(`Table '${this.TABLE_NAME}' does not exist. It will be created on first insertion.`);
+      log.info(`Table '${this.TABLE_NAME}' does not exist. It will be created on first insertion.`);
     }
   }
 
@@ -80,14 +81,14 @@ export class StorageService {
           config: lancedb.Index.fts(),
           replace: true
         });
-        console.log('Created FTS index on "text" column.');
+        log.info('Created FTS index on "text" column.');
 
         // Create FTS index on the 'summary' column
         await this.tableInstance.createIndex('summary', {
           config: lancedb.Index.fts(),
           replace: true
         });
-        console.log('Created FTS index on "summary" column.');
+        log.info('Created FTS index on "summary" column.');
       }
     } else {
       await this.tableInstance.add(data);
@@ -247,7 +248,7 @@ export class StorageService {
         uniqueResults.set(normalized.id, normalized);
       });
     } catch (error) {
-      console.warn('FTS search on text column failed:', error);
+      log.warn('FTS search on text column failed:', error);
     }
 
     // Search on 'summary' column
@@ -264,7 +265,7 @@ export class StorageService {
         }
       });
     } catch (error) {
-      console.warn('FTS search on summary column failed:', error);
+      log.warn('FTS search on summary column failed:', error);
     }
 
     // Return up to limit results

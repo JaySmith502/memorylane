@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import { OpenRouter } from '@openrouter/sdk';
 import { ClassificationInput, ClassificationResult, InteractionContext } from '../../shared/types';
 import { UsageTracker } from '../services/usage-tracker';
+import log from '../logger';
 
 const MODEL_CHOICES: string[] = [
   'mistralai/mistral-small-3.2-24b-instruct',
@@ -30,9 +31,9 @@ export class SemanticClassifierService {
     // Use provided key directly - caller (ApiKeyManager) handles env fallback
     if (apiKey) {
       this.client = new OpenRouter({ apiKey });
-      console.log('[SemanticClassifier] Initialized with API key');
+      log.info('[SemanticClassifier] Initialized with API key');
     } else {
-      console.warn('[SemanticClassifier] No API key provided - classification disabled');
+      log.warn('[SemanticClassifier] No API key provided - classification disabled');
     }
     this.model = model;
     this.maxHistorySize = maxHistorySize;
@@ -54,10 +55,10 @@ export class SemanticClassifierService {
       // Clear env var to prevent SDK from reading it and potentially duplicating keys
       delete process.env.OPENROUTER_API_KEY;
       this.client = new OpenRouter({ apiKey });
-      console.log('[SemanticClassifier] API key updated');
+      log.info('[SemanticClassifier] API key updated');
     } else {
       this.client = null;
-      console.log('[SemanticClassifier] API key cleared');
+      log.info('[SemanticClassifier] API key cleared');
     }
   }
 
@@ -67,7 +68,7 @@ export class SemanticClassifierService {
    */
   public async classify(input: ClassificationInput): Promise<string> {
     if (!this.client) {
-      console.log('[SemanticClassifier] Skipping classification - no API key configured');
+      log.info('[SemanticClassifier] Skipping classification - no API key configured');
       return '';
     }
 
@@ -76,11 +77,11 @@ export class SemanticClassifierService {
 
     try {
       if (isSingleImage) {
-        console.log(`[SemanticClassifier] Single-image classification for ${startScreenshot.id}`);
+        log.info(`[SemanticClassifier] Single-image classification for ${startScreenshot.id}`);
       } else {
-        console.log(`[SemanticClassifier] Classifying activity between ${startScreenshot.id} and ${endScreenshot.id}`);
+        log.info(`[SemanticClassifier] Classifying activity between ${startScreenshot.id} and ${endScreenshot.id}`);
       }
-      console.log(`[SemanticClassifier] Events count: ${input.events.length}`);
+      log.info(`[SemanticClassifier] Events count: ${input.events.length}`);
 
       // Build the appropriate prompt
       const prompt = isSingleImage
@@ -124,7 +125,7 @@ export class SemanticClassifierService {
 
       const messageContent = response.choices?.[0]?.message?.content;
       const summary = typeof messageContent === 'string' ? messageContent.trim() : 'No summary generated';
-      console.log(`[SemanticClassifier] Summary: ${summary}`);
+      log.info(`[SemanticClassifier] Summary: ${summary}`);
 
       // Track usage - always increment request count for successful calls
       const promptTokens = response.usage?.promptTokens || 0;
@@ -135,8 +136,8 @@ export class SemanticClassifierService {
         completion_tokens: completionTokens,
         cost: cost,
       });
-      console.log(`[SemanticClassifier] Usage tracked - Tokens: ${promptTokens}/${completionTokens}, Cost: $${cost.toFixed(6)}`);
-      console.log(`[SemanticClassifier] Total stats: ${JSON.stringify(this.usageTracker.getStats())}`);
+      log.info(`[SemanticClassifier] Usage tracked - Tokens: ${promptTokens}/${completionTokens}, Cost: $${cost.toFixed(6)}`);
+      log.info(`[SemanticClassifier] Total stats: ${JSON.stringify(this.usageTracker.getStats())}`);
 
       // Store in history (use start timestamp for single-image mode)
       const result: ClassificationResult = {
@@ -152,7 +153,7 @@ export class SemanticClassifierService {
 
       return summary;
     } catch (error) {
-      console.error('[SemanticClassifier] Error during classification:', error);
+      log.error('[SemanticClassifier] Error during classification:', error);
       throw error;
     }
   }
