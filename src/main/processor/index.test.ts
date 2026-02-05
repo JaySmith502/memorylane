@@ -59,9 +59,11 @@ describe('EventProcessor', () => {
     
     // 3. Storage
     expect(mockStorageService.addEvent).toHaveBeenCalledWith({
+      appName: '',
       id: screenshot.id,
       timestamp: screenshot.timestamp,
       text: 'Detected Text',
+      summary: '',
       vector: [0.1, 0.2, 0.3],
     });
 
