@@ -4,6 +4,7 @@ import { ApiKeyManager } from './api-key-manager';
 import { CaptureSettingsManager } from './capture-settings-manager';
 import { SemanticClassifierService } from '../processor/semantic-classifier';
 import { CaptureSettings } from '../../shared/types';
+import log from '../logger';
 
 let settingsWindow: BrowserWindow | null = null;
 
@@ -50,14 +51,14 @@ let classifierService: SemanticClassifierService | null = null;
  * Initialize IPC handlers for settings
  */
 export function initSettingsIPC(apiKeyManager: ApiKeyManager, classifier?: SemanticClassifierService): void {
-  console.log('[SettingsIPC] Initializing IPC handlers...');
+  log.info('[SettingsIPC] Initializing IPC handlers...');
   classifierService = classifier || null;
 
   // Get current key status
   ipcMain.handle('settings:getKeyStatus', () => {
-    console.log('[SettingsIPC] settings:getKeyStatus handler called');
+    log.info('[SettingsIPC] settings:getKeyStatus handler called');
     const status = apiKeyManager.getKeyStatus();
-    console.log('[SettingsIPC] Returning status:', status);
+    log.info('[SettingsIPC] Returning status:', status);
     return status;
   });
 
@@ -103,14 +104,14 @@ export function initSettingsIPC(apiKeyManager: ApiKeyManager, classifier?: Seman
  * Initialize IPC handlers for capture settings
  */
 export function initCaptureSettingsIPC(captureSettingsManager: CaptureSettingsManager): void {
-  console.log('[SettingsIPC] Initializing capture settings IPC handlers...');
+  log.info('[SettingsIPC] Initializing capture settings IPC handlers...');
 
   // Get current capture settings
   ipcMain.handle('capture-settings:get', () => {
-    console.log('[SettingsIPC] capture-settings:get handler called');
+    log.info('[SettingsIPC] capture-settings:get handler called');
     const settings = captureSettingsManager.getSettings();
     const defaults = captureSettingsManager.getDefaultSettings();
-    console.log('[SettingsIPC] Returning capture settings:', settings);
+    log.info('[SettingsIPC] Returning capture settings:', settings);
     return { settings, defaults };
   });
 

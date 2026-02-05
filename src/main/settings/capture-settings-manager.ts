@@ -7,6 +7,7 @@ import {
   DEFAULT_VISUAL_DETECTOR_CONFIG,
   DEFAULT_INTERACTION_MONITOR_CONFIG,
 } from '../../shared/constants';
+import log from '../logger';
 
 export interface CaptureSettingsManagerEvents {
   changed: (settings: CaptureSettings) => void;
@@ -87,7 +88,7 @@ export class CaptureSettingsManager extends EventEmitter {
     fs.writeFileSync(this.configPath, JSON.stringify(updated, null, 2));
     this.cachedSettings = updated;
 
-    console.log('[CaptureSettingsManager] Settings saved');
+    log.info('[CaptureSettingsManager] Settings saved');
 
     // Emit change event
     this.emit('changed', updated);
@@ -99,7 +100,7 @@ export class CaptureSettingsManager extends EventEmitter {
   public resetToDefaults(): void {
     if (fs.existsSync(this.configPath)) {
       fs.unlinkSync(this.configPath);
-      console.log('[CaptureSettingsManager] Settings reset to defaults');
+      log.info('[CaptureSettingsManager] Settings reset to defaults');
     }
 
     this.cachedSettings = null;
@@ -128,7 +129,7 @@ export class CaptureSettingsManager extends EventEmitter {
       const data = fs.readFileSync(this.configPath, 'utf-8');
       return JSON.parse(data) as Partial<CaptureSettings>;
     } catch (error) {
-      console.error('[CaptureSettingsManager] Error reading stored settings:', error);
+      log.error('[CaptureSettingsManager] Error reading stored settings:', error);
       return null;
     }
   }

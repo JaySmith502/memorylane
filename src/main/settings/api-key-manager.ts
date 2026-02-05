@@ -1,6 +1,7 @@
 import { app, safeStorage } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
+import log from '../logger';
 
 export type KeySource = 'stored' | 'env' | 'none';
 
@@ -32,7 +33,7 @@ export class ApiKeyManager {
     fs.writeFileSync(this.configPath, JSON.stringify(config, null, 2));
     this.cachedKey = key;
 
-    console.log('[ApiKeyManager] API key saved securely');
+    log.info('[ApiKeyManager] API key saved securely');
   }
 
   /**
@@ -69,7 +70,7 @@ export class ApiKeyManager {
     }
 
     if (!safeStorage.isEncryptionAvailable()) {
-      console.warn('[ApiKeyManager] Secure storage not available, cannot decrypt key');
+      log.warn('[ApiKeyManager] Secure storage not available, cannot decrypt key');
       return null;
     }
 
@@ -84,7 +85,7 @@ export class ApiKeyManager {
       const encryptedBuffer = Buffer.from(config.apiKey, 'base64');
       return safeStorage.decryptString(encryptedBuffer);
     } catch (error) {
-      console.error('[ApiKeyManager] Error reading stored key:', error);
+      log.error('[ApiKeyManager] Error reading stored key:', error);
       return null;
     }
   }
@@ -102,7 +103,7 @@ export class ApiKeyManager {
   public deleteApiKey(): void {
     if (fs.existsSync(this.configPath)) {
       fs.unlinkSync(this.configPath);
-      console.log('[ApiKeyManager] API key deleted');
+      log.info('[ApiKeyManager] API key deleted');
     }
     this.cachedKey = null;
   }
