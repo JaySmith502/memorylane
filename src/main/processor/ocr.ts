@@ -1,22 +1,27 @@
 import { spawn } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import { app } from 'electron';
 
 /**
  * Resolves the path to the Swift OCR script.
  * In development, it looks in the src directory.
- * In production, it should be in the resources directory (not yet implemented).
+ * In production, it looks in the resources directory.
  */
 function getOcrScriptPath(): string {
-  // Development path: resolve relative to CWD (project root)
+  if (app.isPackaged) {
+    const prodPath = path.join(process.resourcesPath, 'swift', 'ocr.swift');
+    if (fs.existsSync(prodPath)) {
+      return prodPath;
+    }
+    throw new Error(`OCR script not found at ${prodPath}`);
+  }
+
   const devPath = path.resolve(process.cwd(), 'src', 'main', 'processor', 'swift', 'ocr.swift');
-  
   if (fs.existsSync(devPath)) {
     return devPath;
   }
-  
-  // TODO: Add logic for production path resolution (e.g. process.resourcesPath)
-  
+
   throw new Error(`OCR script not found at ${devPath}`);
 }
 

@@ -15,6 +15,10 @@ extraResources:
     to: assets
     filter:
       - "**/*"
+  - from: src/main/processor/swift
+    to: swift
+    filter:
+      - "*.swift"
 
 asar: true
 asarUnpack:
