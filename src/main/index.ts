@@ -31,7 +31,11 @@ import { initSettingsIPC, openSettingsWindow } from './settings/settings-window'
 import { Screenshot } from '../shared/types';
 import dotenv from 'dotenv';
 
-dotenv.config();
+try {
+  dotenv.config();
+} catch (e) {
+  // cwd might not be available in packaged app context — expected, we don't need .env there
+}
 
 // Prevent app from quitting when all windows are closed (tray app or MCP server)
 app.on('window-all-closed', () => {
