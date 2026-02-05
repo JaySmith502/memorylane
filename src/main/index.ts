@@ -9,13 +9,12 @@
 // Detect MCP mode FIRST, before any heavy imports
 const isMCPMode = process.argv.includes('--mcp');
 
+import { app, Tray, Menu, nativeImage } from 'electron';
 import log, { configureMCPMode } from './logger';
 
 if (isMCPMode) {
   configureMCPMode();
 }
-
-import { app, Tray, Menu, nativeImage } from 'electron';
 import path from 'node:path';
 import { EventProcessor } from './processor/index';
 import { EmbeddingService } from './processor/embedding';
