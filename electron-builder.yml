@@ -30,6 +30,8 @@ asarUnpack:
   - "node_modules/active-win/**/*"
   - "**/*.node"
 
+afterSign: build/notarize.js
+
 mac:
   category: public.app-category.productivity
   identity: "Developer ID Application: Filip Kubis (ZN3J54N7AP)"
