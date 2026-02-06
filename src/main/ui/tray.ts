@@ -7,6 +7,7 @@ import path from 'node:path'
 import log from '../logger'
 import { formatBytes, formatNumber } from '../utils/formatters'
 import { openSettingsWindow } from '../settings/settings-window'
+import { registerWithClaudeDesktop } from '../integrations/claude-desktop'
 import { Screenshot, InteractionContext } from '../../shared/types'
 import type { EventProcessor } from '../processor/index'
 
@@ -129,6 +130,13 @@ export const updateTrayMenu = async (): Promise<void> => {
       label: 'Settings...',
       click: () => {
         openSettingsWindow()
+      },
+    },
+    { type: 'separator' },
+    {
+      label: 'Add to Claude Desktop',
+      click: () => {
+        void registerWithClaudeDesktop()
       },
     },
     { type: 'separator' },
