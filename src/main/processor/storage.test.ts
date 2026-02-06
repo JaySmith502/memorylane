@@ -3,18 +3,12 @@ import { StorageService, StoredEvent } from './storage'
 import * as path from 'path'
 import * as fs from 'fs'
 
-// Helper to delete directory recursively
-const deleteFolderRecursive = (directoryPath: string) => {
-  if (fs.existsSync(directoryPath)) {
-    fs.readdirSync(directoryPath).forEach((file) => {
-      const curPath = path.join(directoryPath, file)
-      if (fs.lstatSync(curPath).isDirectory()) {
-        deleteFolderRecursive(curPath)
-      } else {
-        fs.unlinkSync(curPath)
-      }
-    })
-    fs.rmdirSync(directoryPath)
+const deleteDbFiles = (dbPath: string): void => {
+  for (const suffix of ['', '-wal', '-shm']) {
+    const filePath = dbPath + suffix
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath)
+    }
   }
 }
 
@@ -29,19 +23,19 @@ const createEvent = (overrides: Partial<StoredEvent> & { id: string }): StoredEv
 })
 
 describe('StorageService', () => {
-  const TEST_DB_PATH = path.join(process.cwd(), 'temp_test_lancedb')
+  const TEST_DB_PATH = path.join(process.cwd(), 'temp_test.db')
+  const VECTOR_DIMS = 3
   let storage: StorageService
 
   beforeEach(async () => {
-    // Clean up before each test
-    deleteFolderRecursive(TEST_DB_PATH)
-    storage = new StorageService(TEST_DB_PATH)
+    deleteDbFiles(TEST_DB_PATH)
+    storage = new StorageService(TEST_DB_PATH, { vectorDimensions: VECTOR_DIMS })
     await storage.init()
   })
 
   afterEach(async () => {
     await storage.close()
-    deleteFolderRecursive(TEST_DB_PATH)
+    deleteDbFiles(TEST_DB_PATH)
   })
 
   it('should add and retrieve an event with all fields', async () => {
@@ -72,7 +66,7 @@ describe('StorageService', () => {
 
   it('should auto-initialize when addEvent is called without prior init', async () => {
     // Create a new storage instance without calling init()
-    const autoInitStorage = new StorageService(TEST_DB_PATH)
+    const autoInitStorage = new StorageService(TEST_DB_PATH, { vectorDimensions: VECTOR_DIMS })
 
     const event = createEvent({
       id: 'auto-init-1',
