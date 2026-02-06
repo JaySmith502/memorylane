@@ -7,6 +7,8 @@ import * as os from 'os';
  * In the main Electron process, it is preferred to use app.getPath('userData').
  */
 export function getDefaultDbPath(): string {
+  const dbDir = isDev() ? 'lancedb-dev' : 'lancedb';
+
   // Check if running in Electron (using process.versions.electron)
   if (process.versions.electron) {
     try {
@@ -16,7 +18,7 @@ export function getDefaultDbPath(): string {
       // If app is available (main process), use it
       if (app) {
         const userDataPath = app.getPath('userData');
-        return path.join(userDataPath, 'lancedb');
+        return path.join(userDataPath, dbDir);
       }
     } catch (e) {
       // Ignore error if electron module is not available or app is not ready
@@ -25,11 +27,23 @@ export function getDefaultDbPath(): string {
 
   // Fallback for CLI / Standalone mode (mimic Electron's default paths)
   if (process.platform === 'darwin') {
-    return path.join(os.homedir(), 'Library', 'Application Support', 'memorylane', 'lancedb');
+    return path.join(os.homedir(), 'Library', 'Application Support', 'memorylane', dbDir);
   }
   if (process.platform === 'win32') {
-    return path.join(process.env.APPDATA || '', 'memorylane', 'lancedb');
+    return path.join(process.env.APPDATA || '', 'memorylane', dbDir);
   }
   // Linux and others
-  return path.join(os.homedir(), '.config', 'memorylane', 'lancedb');
+  return path.join(os.homedir(), '.config', 'memorylane', dbDir);
+}
+
+function isDev(): boolean {
+  if (process.versions.electron) {
+    try {
+      const { app } = require('electron');
+      if (app) return !app.isPackaged;
+    } catch (e) {
+      // Fall through to env check
+    }
+  }
+  return process.env.NODE_ENV !== 'production';
 }
