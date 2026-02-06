@@ -1,6 +1,6 @@
 appId: com.memorylane.app
 productName: MemoryLane
-copyright: Copyright © 2026 Petr Ungar
+copyright: Copyright © 2026 Filip Kubis
 
 directories:
   buildResources: assets
