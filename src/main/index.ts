@@ -135,8 +135,24 @@ if (isMCPMode) {
 
   // This method will be called when Electron has finished initialization
   app.on('ready', async () => {
-    const { ensurePermissions } = await import('./ui/permissions')
-    await ensurePermissions()
+    try {
+      const { ensurePermissions } = await import('./ui/permissions')
+      await ensurePermissions()
+    } catch (error) {
+      log.error('[Startup] Fatal error during permissions check:', error)
+      const { dialog } = await import('electron')
+      await dialog.showMessageBox({
+        type: 'error',
+        title: 'Startup Error',
+        message: 'Failed to verify permissions',
+        detail:
+          'An unexpected error occurred while checking permissions. ' +
+          'Please try restarting the app. If the problem persists, check the logs.',
+      })
+      app.quit()
+      return
+    }
+
     await initRecorderMode()
 
     const { setupTray } = await import('./ui/tray')
