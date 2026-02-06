@@ -17,6 +17,7 @@ import { StorageService, StoredEvent } from '../processor/storage';
 import { EmbeddingService } from '../processor/embedding';
 import { getDefaultDbPath } from '../paths';
 import log from '../logger';
+import { parseTimeString } from './parse-time';
 
 const SERVER_NAME = 'memorylane';
 const SERVER_VERSION = '1.0.0';
@@ -62,69 +63,6 @@ export class MemoryLaneMCPServer {
     );
   }
 
-  /**
-   * Parses a time string into a Unix timestamp (ms).
-   * Supports ISO 8601 and relative time strings like "now", "today", "yesterday", "X hours/days/minutes ago".
-   */
-  private parseTimeString(timeStr: string): number | null {
-    const trimmed = timeStr.trim().toLowerCase();
-
-    // Handle "now"
-    if (trimmed === 'now') {
-      return Date.now();
-    }
-
-    // Handle "today" (start of today)
-    if (trimmed === 'today') {
-      const now = new Date();
-      now.setHours(0, 0, 0, 0);
-      return now.getTime();
-    }
-
-    // Handle "yesterday" (start of yesterday)
-    if (trimmed === 'yesterday') {
-      const now = new Date();
-      now.setDate(now.getDate() - 1);
-      now.setHours(0, 0, 0, 0);
-      return now.getTime();
-    }
-
-    // Handle relative time: "X unit(s) ago"
-    const relativeMatch = trimmed.match(/^(\d+)\s*(minute|hour|day|week|month)s?\s*ago$/);
-    if (relativeMatch) {
-      const amount = parseInt(relativeMatch[1], 10);
-      const unit = relativeMatch[2];
-      const now = new Date();
-
-      switch (unit) {
-        case 'minute':
-          now.setMinutes(now.getMinutes() - amount);
-          break;
-        case 'hour':
-          now.setHours(now.getHours() - amount);
-          break;
-        case 'day':
-          now.setDate(now.getDate() - amount);
-          break;
-        case 'week':
-          now.setDate(now.getDate() - amount * 7);
-          break;
-        case 'month':
-          now.setMonth(now.getMonth() - amount);
-          break;
-      }
-      return now.getTime();
-    }
-
-    // Try ISO 8601 parsing
-    const isoDate = new Date(timeStr);
-    if (!isNaN(isoDate.getTime())) {
-      return isoDate.getTime();
-    }
-
-    // Could not parse
-    return null;
-  }
 
   /**
    * Handler for the search_context tool.
@@ -158,8 +96,8 @@ export class MemoryLaneMCPServer {
       const effectiveLimit = limit ?? 5;
 
       // Parse time strings
-      const startTime = startTimeStr ? this.parseTimeString(startTimeStr) : undefined;
-      const endTime = endTimeStr ? this.parseTimeString(endTimeStr) : undefined;
+      const startTime = startTimeStr ? parseTimeString(startTimeStr) : undefined;
+      const endTime = endTimeStr ? parseTimeString(endTimeStr) : undefined;
 
       // Validate parsed times
       if (startTimeStr && startTime === null) {
