@@ -2,7 +2,7 @@
  * macOS permissions management for Accessibility and Screen Recording
  */
 
-import { systemPreferences, desktopCapturer, dialog, shell, app } from 'electron'
+import { systemPreferences, desktopCapturer, app } from 'electron'
 import log from '../logger'
 
 /**
@@ -84,28 +84,9 @@ const ensureScreenRecordingPermission = async (): Promise<void> => {
     log.info('[Permissions] Trial capture completed (permission not yet granted)')
   }
 
-  // Open the Screen Recording pane directly
-  await shell.openExternal(
-    'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
-  )
-
   // Schedule app relaunch for when macOS forces quit after granting permission
   app.relaunch()
   log.info('[Permissions] App relaunch scheduled for after Screen Recording grant')
-
-  // Show focused dialog for Screen Recording
-  await dialog.showMessageBox({
-    type: 'info',
-    title: 'Screen Recording Permission Required',
-    message: 'MemoryLane needs Screen Recording permission',
-    detail:
-      'This permission allows MemoryLane to capture screenshots.\n\n' +
-      'System Settings has been opened to the Screen Recording pane. ' +
-      'Please enable MemoryLane in the list.\n\n' +
-      'Note: After granting this permission, macOS may require the app to restart. ' +
-      'MemoryLane will restart automatically.',
-    buttons: ['OK'],
-  })
 
   // Poll until Screen Recording is granted
   // This may never complete if macOS forces a quit, but we handle that with relaunch()
