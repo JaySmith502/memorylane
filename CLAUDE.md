@@ -83,7 +83,7 @@ src/
 3. **Processor Module** (`src/main/processor/`): Screenshot processing
    - OCR using macOS Vision framework (Swift)
    - Vector embeddings using Transformers.js
-   - Storage using LanceDB for vector search
+   - Storage using SQLite (better-sqlite3 + sqlite-vec) for persistence, FTS, and vector search
 
 ### Build System
 
@@ -105,7 +105,7 @@ This project uses several native Node.js modules that require special handling:
 
 - `uiohook-napi` - Keyboard/mouse monitoring
 - `sharp` - Image processing
-- `@lancedb/lancedb` - Vector database
+- `better-sqlite3` - SQLite database
 - `active-win` - Active window detection
 - `onnxruntime-node` - ML inference
 
