@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Toaster } from '../../components/ui/sonner'
-import { useMainWindowAPI } from '../../hooks/use-main-window-api'
+import { Toaster } from '@components/ui/sonner'
+import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { Logo } from './components/Logo'
 import { ApiKeySetupSection } from './components/ApiKeySetupSection'
 import { CaptureControlSection } from './components/CaptureControlSection'
 import { StatsDisplay } from './components/StatsDisplay'
 import { IntegrationsSection } from './components/IntegrationsSection'
 import { ManageKeySection } from './components/ManageKeySection'
-import type { KeyStatus, MainWindowStats } from '../../../shared/types'
+import type { KeyStatus, MainWindowStats } from '@types'
 
 export function MainWindowApp(): React.JSX.Element {
   const api = useMainWindowAPI()

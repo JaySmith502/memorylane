@@ -121,6 +121,11 @@ These are:
 - Module: ESNext with bundler resolution
 - Isolated modules enabled for Vite compatibility
 - Source maps enabled for debugging
+- Path aliases (configured in both Vite and TypeScript):
+  - `@/` maps to `src/`
+  - `@components/` maps to `src/renderer/components/`
+  - `@types` maps to `src/shared/types`
+  - Use these aliases instead of deep relative paths in renderer code
 
 ## Key Patterns
 

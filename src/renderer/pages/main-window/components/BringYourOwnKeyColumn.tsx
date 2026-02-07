@@ -1,10 +1,10 @@
 import * as React from 'react'
 import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
-import { Button } from '../../../components/ui/button'
-import { Input } from '../../../components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card'
-import type { MainWindowAPI } from '../../../../shared/types'
+import { Button } from '@components/ui/button'
+import { Input } from '@components/ui/input'
+import { Card, CardContent, CardHeader, CardTitle } from '@components/ui/card'
+import type { MainWindowAPI } from '@types'
 
 interface BringYourOwnKeyColumnProps {
   api: MainWindowAPI

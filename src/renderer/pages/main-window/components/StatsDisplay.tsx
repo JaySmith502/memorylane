@@ -1,6 +1,6 @@
 import * as React from 'react'
-import { Card, CardContent } from '../../../components/ui/card'
-import type { MainWindowStats } from '../../../../shared/types'
+import { Card, CardContent } from '@components/ui/card'
+import type { MainWindowStats } from '@types'
 
 interface StatsDisplayProps {
   stats: MainWindowStats | null

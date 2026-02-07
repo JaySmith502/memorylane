@@ -1,4 +1,4 @@
-import type { MainWindowAPI } from '../../shared/types'
+import type { MainWindowAPI } from '@types'
 
 export function useMainWindowAPI(): MainWindowAPI {
   const api = (window as unknown as { mainWindowAPI?: MainWindowAPI }).mainWindowAPI

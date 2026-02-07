@@ -1,15 +1,9 @@
 import * as React from 'react'
 import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
-import { Button } from '../../../components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../../../components/ui/card'
-import type { MainWindowAPI } from '../../../../shared/types'
+import { Button } from '@components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@components/ui/card'
+import type { MainWindowAPI } from '@types'
 
 interface IntegrationsSectionProps {
   api: MainWindowAPI

@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { SubscribeColumn } from './SubscribeColumn'
 import { BringYourOwnKeyColumn } from './BringYourOwnKeyColumn'
-import type { MainWindowAPI } from '../../../../shared/types'
+import type { MainWindowAPI } from '@types'
 
 interface ApiKeySetupSectionProps {
   api: MainWindowAPI
