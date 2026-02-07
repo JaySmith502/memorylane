@@ -93,25 +93,14 @@ export function ApiKeySection(): React.JSX.Element {
   const canDelete = keyStatus?.source === 'stored'
 
   return (
-    <Card className="border-zinc-700/50 bg-zinc-800/50">
+    <Card>
       <CardHeader>
-        <CardTitle className="text-lg text-white">API Key</CardTitle>
-        <CardDescription className="text-zinc-400">
-          Required for activity classification.
-        </CardDescription>
+        <CardTitle>API Key</CardTitle>
+        <CardDescription>Required for activity classification.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {keyStatus !== null && (
-          <Badge
-            variant="outline"
-            className={
-              keyStatus.source === 'none'
-                ? 'border-zinc-700/50 text-zinc-400 bg-zinc-800/50'
-                : keyStatus.source === 'env'
-                  ? 'border-zinc-600 text-zinc-200 bg-zinc-700/50'
-                  : 'border-zinc-600 text-zinc-200 bg-zinc-700/50'
-            }
-          >
+          <Badge variant={keyStatus.source === 'none' ? 'secondary' : 'outline'}>
             {keyStatus.source === 'stored' && `Stored: ${keyStatus.maskedKey}`}
             {keyStatus.source === 'env' && `Environment: ${keyStatus.maskedKey}`}
             {keyStatus.source === 'none' && 'No key configured'}
@@ -126,28 +115,25 @@ export function ApiKeySection(): React.JSX.Element {
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="pr-16 bg-zinc-900/50 border-zinc-600 text-zinc-100 font-mono text-sm placeholder:text-zinc-500"
+            className="pr-16 font-mono"
           />
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="xs"
             onClick={() => setPasswordVisible((v) => !v)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-zinc-200 bg-zinc-700/50 hover:bg-zinc-700 rounded-md transition-all"
+            className="absolute right-2 top-1/2 -translate-y-1/2"
           >
             {passwordVisible ? 'Hide' : 'Show'}
-          </button>
+          </Button>
         </div>
 
         <div className="flex gap-2">
-          <Button
-            className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white"
-            disabled={saving}
-            onClick={() => void handleSave()}
-          >
+          <Button className="flex-1" disabled={saving} onClick={() => void handleSave()}>
             {saving ? 'Saving...' : 'Save'}
           </Button>
           <Button
-            variant="outline"
-            className="border-zinc-600 text-zinc-300 hover:text-red-400 hover:border-red-500/50 hover:bg-red-600/20"
+            variant="destructive"
             disabled={!canDelete || deleting}
             onClick={() => void handleDelete()}
           >
@@ -155,7 +141,7 @@ export function ApiKeySection(): React.JSX.Element {
           </Button>
         </div>
 
-        <p className="text-xs text-zinc-500 text-center">
+        <p className="text-xs text-muted-foreground text-center">
           Your API key is encrypted and stored securely on this device.
         </p>
       </CardContent>

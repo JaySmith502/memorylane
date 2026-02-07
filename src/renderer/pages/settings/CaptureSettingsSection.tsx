@@ -71,18 +71,16 @@ export function CaptureSettingsSection(): React.JSX.Element {
   }, [api, loadSettings])
 
   return (
-    <Card className="border-zinc-700/50 bg-zinc-800/50">
+    <Card>
       <CardHeader>
-        <CardTitle className="text-lg text-white">Capture Settings</CardTitle>
-        <CardDescription className="text-zinc-400">
-          Adjust sensitivity and timing for screen capture.
-        </CardDescription>
+        <CardTitle>Capture Settings</CardTitle>
+        <CardDescription>Adjust sensitivity and timing for screen capture.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div>
           <div className="flex justify-between items-center mb-3">
-            <Label className="text-sm font-medium text-zinc-300">Visual Change Threshold</Label>
-            <span className="text-sm text-zinc-400 font-mono">{dhashThreshold}%</span>
+            <Label>Visual Change Threshold</Label>
+            <span className="text-sm font-mono text-muted-foreground">{dhashThreshold}%</span>
           </div>
           <Slider
             min={1}
@@ -93,15 +91,15 @@ export function CaptureSettingsSection(): React.JSX.Element {
               if (values[0] !== undefined) setDhashThreshold(values[0])
             }}
           />
-          <p className="text-xs text-zinc-500 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Lower = more sensitive (more captures). Higher = less sensitive.
           </p>
         </div>
 
         <div>
           <div className="flex justify-between items-center mb-3">
-            <Label className="text-sm font-medium text-zinc-300">Typing Session Timeout</Label>
-            <span className="text-sm text-zinc-400 font-mono">{typingTimeout}ms</span>
+            <Label>Typing Session Timeout</Label>
+            <span className="text-sm font-mono text-muted-foreground">{typingTimeout}ms</span>
           </div>
           <Slider
             min={500}
@@ -112,15 +110,15 @@ export function CaptureSettingsSection(): React.JSX.Element {
               if (values[0] !== undefined) setTypingTimeout(values[0])
             }}
           />
-          <p className="text-xs text-zinc-500 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             How long to wait after last keystroke before ending typing session.
           </p>
         </div>
 
         <div>
           <div className="flex justify-between items-center mb-3">
-            <Label className="text-sm font-medium text-zinc-300">Scroll Session Timeout</Label>
-            <span className="text-sm text-zinc-400 font-mono">{scrollTimeout}ms</span>
+            <Label>Scroll Session Timeout</Label>
+            <span className="text-sm font-mono text-muted-foreground">{scrollTimeout}ms</span>
           </div>
           <Slider
             min={200}
@@ -131,25 +129,16 @@ export function CaptureSettingsSection(): React.JSX.Element {
               if (values[0] !== undefined) setScrollTimeout(values[0])
             }}
           />
-          <p className="text-xs text-zinc-500 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             How long to wait after last scroll before ending scroll session.
           </p>
         </div>
 
         <div className="flex gap-2 pt-2">
-          <Button
-            className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white"
-            disabled={saving}
-            onClick={() => void handleSave()}
-          >
+          <Button className="flex-1" disabled={saving} onClick={() => void handleSave()}>
             {saving ? 'Saving...' : 'Save'}
           </Button>
-          <Button
-            variant="outline"
-            className="border-zinc-600 text-zinc-300 hover:text-white hover:bg-zinc-700"
-            disabled={resetting}
-            onClick={() => void handleReset()}
-          >
+          <Button variant="outline" disabled={resetting} onClick={() => void handleReset()}>
             {resetting ? 'Resetting...' : 'Reset to Defaults'}
           </Button>
         </div>

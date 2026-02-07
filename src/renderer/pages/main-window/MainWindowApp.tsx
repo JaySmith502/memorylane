@@ -36,20 +36,17 @@ export function MainWindowApp(): React.JSX.Element {
   }, [api])
 
   return (
-    <div className="min-h-screen bg-zinc-900 text-zinc-100 antialiased select-none">
+    <div className="min-h-screen antialiased select-none">
       <div className="p-8 max-w-lg mx-auto space-y-6">
         <div className="text-center">
-          <h1 className="text-xl font-semibold text-white tracking-tight">MemoryLane</h1>
+          <h1 className="text-xl font-semibold tracking-tight">MemoryLane</h1>
         </div>
 
-        <Card className="border-zinc-700/50 bg-zinc-800/50">
+        <Card>
           <CardContent>
             <Button
-              className={
-                capturing
-                  ? 'w-full bg-red-700/80 hover:bg-red-700 text-white'
-                  : 'w-full bg-zinc-700 hover:bg-zinc-600 text-white'
-              }
+              className="w-full"
+              variant={capturing ? 'destructive' : 'default'}
               size="lg"
               disabled={toggling}
               onClick={() => void handleToggle()}
@@ -59,11 +56,7 @@ export function MainWindowApp(): React.JSX.Element {
           </CardContent>
         </Card>
 
-        <Button
-          variant="outline"
-          className="w-full border-zinc-700/50 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-300 hover:text-white"
-          onClick={handleOpenSettings}
-        >
+        <Button variant="outline" className="w-full" onClick={handleOpenSettings}>
           Settings
         </Button>
       </div>

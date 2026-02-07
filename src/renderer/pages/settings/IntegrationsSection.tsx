@@ -15,24 +15,16 @@ export function IntegrationsSection(): React.JSX.Element {
   }, [api])
 
   return (
-    <Card className="border-zinc-700/50 bg-zinc-800/50">
+    <Card>
       <CardHeader>
-        <CardTitle className="text-lg text-white">Integrations</CardTitle>
-        <CardDescription className="text-zinc-400">
-          Register MemoryLane as an MCP server for AI assistants.
-        </CardDescription>
+        <CardTitle>Integrations</CardTitle>
+        <CardDescription>Register MemoryLane as an MCP server for AI assistants.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
-        <Button
-          className="w-full bg-zinc-700 hover:bg-zinc-600 text-white"
-          onClick={handleAddToClaude}
-        >
+        <Button className="w-full" onClick={handleAddToClaude}>
           Add to Claude Desktop
         </Button>
-        <Button
-          className="w-full bg-zinc-700 hover:bg-zinc-600 text-white"
-          onClick={handleAddToCursor}
-        >
+        <Button className="w-full" onClick={handleAddToCursor}>
           Add to Cursor
         </Button>
       </CardContent>
