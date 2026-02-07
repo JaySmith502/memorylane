@@ -72,6 +72,9 @@ function buildMCPEntry(): MCPServerEntry {
   return {
     command: app.getPath('exe'),
     args: ['--mcp'],
+    env: {
+      ELECTRON_RUN_AS_NODE: '',
+    },
   }
 }
 
