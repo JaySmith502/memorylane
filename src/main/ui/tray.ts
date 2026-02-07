@@ -11,6 +11,7 @@ import { registerWithClaudeDesktop } from '../integrations/claude-desktop'
 import { registerWithCursor } from '../integrations/cursor'
 import { Screenshot, InteractionContext } from '../../shared/types'
 import type { EventProcessor } from '../processor/index'
+import { sendStatusToRenderer } from './main-window'
 
 interface TrayDependencies {
   recorder: {
@@ -29,6 +30,13 @@ interface TrayDependencies {
 
 let tray: Tray | null = null
 let deps: TrayDependencies | null = null
+
+app.on('before-quit', () => {
+  if (tray) {
+    tray.destroy()
+    tray = null
+  }
+})
 
 /**
  * Build the usage stats submenu with API and storage statistics
@@ -120,6 +128,7 @@ export const updateTrayMenu = async (): Promise<void> => {
           deps!.recorder.startCapture()
         }
         void updateTrayMenu()
+        void sendStatusToRenderer()
       },
     },
     { type: 'separator' },
@@ -198,8 +207,8 @@ export const setupTray = (dependencies: TrayDependencies): void => {
       try {
         await deps.processor.processScreenshot(screenshot)
         log.info(`[Main] Screenshot processed successfully: ${screenshot.id}`)
-        // Refresh tray menu to show updated usage stats
         void updateTrayMenu()
+        void sendStatusToRenderer()
       } catch (error) {
         log.error(`[Main] Error processing screenshot ${screenshot.id}:`, error)
       }

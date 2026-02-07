@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('settingsAPI', {
   deleteApiKey: () => ipcRenderer.invoke('settings:deleteApiKey'),
   close: () => ipcRenderer.send('settings:close'),
   openExternal: (url: string) => shell.openExternal(url),
+  addToClaude: () => ipcRenderer.invoke('settings:addToClaude'),
+  addToCursor: () => ipcRenderer.invoke('settings:addToCursor'),
 })
 
 console.log('[Preload] settingsAPI exposed to renderer')
@@ -30,3 +32,15 @@ contextBridge.exposeInMainWorld('captureSettingsAPI', {
 })
 
 console.log('[Preload] captureSettingsAPI exposed to renderer')
+
+// Expose main window API to renderer
+contextBridge.exposeInMainWorld('mainWindowAPI', {
+  getStatus: () => ipcRenderer.invoke('main-window:getStatus'),
+  toggleCapture: () => ipcRenderer.invoke('main-window:toggleCapture'),
+  openSettings: () => ipcRenderer.send('main-window:openSettings'),
+  onStatusChanged: (callback: (status: unknown) => void) => {
+    ipcRenderer.on('main-window:statusChanged', (_event, status) => callback(status))
+  },
+})
+
+console.log('[Preload] mainWindowAPI exposed to renderer')
