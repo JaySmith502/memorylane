@@ -1,6 +1,6 @@
 import { uIOhook, UiohookMouseEvent, UiohookWheelEvent } from 'uiohook-napi'
 import activeWin from 'active-win'
-import { DEFAULT_INTERACTION_MONITOR_CONFIG } from '../../shared/constants'
+import { DEFAULT_INTERACTION_MONITOR_CONFIG } from '@constants'
 import { InteractionContext, CaptureSettings } from '../../shared/types'
 import { CaptureSettingsManager } from '../settings/capture-settings-manager'
 import log from '../logger'

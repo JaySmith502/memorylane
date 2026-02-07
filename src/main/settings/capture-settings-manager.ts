@@ -3,10 +3,7 @@ import { EventEmitter } from 'events'
 import * as fs from 'fs'
 import * as path from 'path'
 import { CaptureSettings } from '../../shared/types'
-import {
-  DEFAULT_VISUAL_DETECTOR_CONFIG,
-  DEFAULT_INTERACTION_MONITOR_CONFIG,
-} from '../../shared/constants'
+import { DEFAULT_VISUAL_DETECTOR_CONFIG, DEFAULT_INTERACTION_MONITOR_CONFIG } from '@constants'
 import log from '../logger'
 
 export interface CaptureSettingsManagerEvents {

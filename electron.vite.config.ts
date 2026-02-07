@@ -5,6 +5,11 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   main: {
+    resolve: {
+      alias: {
+        '@constants': resolve(__dirname, 'src/shared/constants'),
+      },
+    },
     plugins: [externalizeDepsPlugin()],
     build: {
       sourcemap: true,
@@ -32,6 +37,7 @@ export default defineConfig({
       alias: {
         '@': resolve(__dirname, 'src'),
         '@components': resolve(__dirname, 'src/renderer/components'),
+        '@constants': resolve(__dirname, 'src/shared/constants'),
         '@types': resolve(__dirname, 'src/shared/types'),
       },
     },

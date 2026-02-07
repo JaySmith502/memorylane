@@ -3,7 +3,11 @@
   "compilerOptions": {
     "composite": true,
     "outDir": "dist/node",
-    "types": ["node"]
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@constants": ["src/shared/constants"]
+    }
   },
   "include": ["src/main/**/*", "src/preload/**/*", "src/shared/**/*", "electron.vite.config.ts"]
 }

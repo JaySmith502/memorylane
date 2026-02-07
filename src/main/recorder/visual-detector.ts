@@ -1,5 +1,5 @@
 import { desktopCapturer } from 'electron'
-import { DEFAULT_VISUAL_DETECTOR_CONFIG } from '../../shared/constants'
+import { DEFAULT_VISUAL_DETECTOR_CONFIG } from '@constants'
 import { CaptureSettingsManager } from '../settings/capture-settings-manager'
 import log from '../logger'
 
