@@ -78,3 +78,46 @@ export interface CaptureSettings {
     scrollSessionTimeoutMs: number
   }
 }
+
+export interface KeyStatus {
+  hasKey: boolean
+  source: 'stored' | 'env' | 'none'
+  maskedKey: string | null
+}
+
+export interface SaveResult {
+  success: boolean
+  error?: string | undefined
+}
+
+export interface SettingsAPI {
+  getKeyStatus: () => Promise<KeyStatus>
+  saveApiKey: (key: string) => Promise<SaveResult>
+  deleteApiKey: () => Promise<SaveResult>
+  close: () => void
+  openExternal: (url: string) => Promise<void>
+  addToClaude: () => Promise<void>
+  addToCursor: () => Promise<void>
+}
+
+export interface CaptureSettingsResponse {
+  settings: CaptureSettings
+  defaults: CaptureSettings
+}
+
+export interface CaptureSettingsAPI {
+  get: () => Promise<CaptureSettingsResponse>
+  save: (partialSettings: Partial<CaptureSettings>) => Promise<SaveResult>
+  reset: () => Promise<SaveResult>
+}
+
+export interface MainWindowStatus {
+  capturing: boolean
+}
+
+export interface MainWindowAPI {
+  getStatus: () => Promise<MainWindowStatus>
+  toggleCapture: () => Promise<MainWindowStatus>
+  openSettings: () => void
+  onStatusChanged: (callback: (status: MainWindowStatus) => void) => void
+}
