@@ -57,6 +57,9 @@ export interface StoredEvent extends Record<string, unknown> {
   vector: number[]
 }
 
+/** sqlite-vec hard limit for the k parameter in knn queries. */
+const SQLITE_VEC_KNN_MAX = 4096
+
 interface StorageOptions {
   readonly vectorDimensions?: number
 }
@@ -238,6 +241,7 @@ export class StorageService {
     if (count === 0) return []
 
     const vectorBlob = this.vectorToBlob(queryVector)
+    const effectiveLimit = Math.min(limit, SQLITE_VEC_KNN_MAX)
 
     const rows = this.db
       .prepare(
@@ -250,7 +254,7 @@ export class StorageService {
          ) vec
          JOIN context_events ce ON ce.id = vec.id`,
       )
-      .all(vectorBlob, limit) as Record<string, unknown>[]
+      .all(vectorBlob, effectiveLimit) as Record<string, unknown>[]
 
     return rows.map((row) => this.rowToStoredEvent(row))
   }
@@ -282,7 +286,7 @@ export class StorageService {
     }
 
     const vectorBlob = this.vectorToBlob(queryVector)
-    const overFetchLimit = Math.max(limit * 10, count)
+    const overFetchLimit = Math.min(Math.max(limit * 10, count), SQLITE_VEC_KNN_MAX)
     const { conditions, params } = this.buildFilterConditions(filters)
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
