@@ -1,57 +1,11 @@
 import { uIOhook, UiohookMouseEvent, UiohookWheelEvent } from 'uiohook-napi'
 import activeWin from 'active-win'
-import { DEFAULT_INTERACTION_MONITOR_CONFIG } from '@constants'
-import { InteractionContext, CaptureSettings } from '../../shared/types'
-import { CaptureSettingsManager } from '../settings/capture-settings-manager'
+import { INTERACTION_MONITOR_CONFIG } from '@constants'
+import { InteractionContext } from '../../shared/types'
 import log from '../logger'
 
 // State
 let isRunning = false
-let settingsManager: CaptureSettingsManager | null = null
-
-/**
- * Initialize interaction monitor with settings manager
- */
-export function initInteractionMonitor(manager: CaptureSettingsManager): void {
-  settingsManager = manager
-
-  // Subscribe to settings changes to restart interval if needed
-  manager.on('changed', (settings: CaptureSettings) => {
-    if (isRunning) {
-      // Restart app change polling with new interval if it's running
-      if (appChangeIntervalId && DEFAULT_INTERACTION_MONITOR_CONFIG.TRACK_APP_CHANGE) {
-        clearInterval(appChangeIntervalId)
-        appChangeIntervalId = setInterval(() => {
-          checkAppChange().catch(log.error)
-        }, DEFAULT_INTERACTION_MONITOR_CONFIG.APP_CHANGE_POLL_MS)
-        log.info('[Interaction Monitor] App change polling restarted with updated settings')
-      }
-    }
-    log.info('[Interaction Monitor] Settings changed:', settings)
-  })
-
-  log.info('[Interaction Monitor] Initialized with settings manager')
-}
-
-/**
- * Get current interaction monitor settings
- */
-function getConfig() {
-  if (settingsManager) {
-    const settings = settingsManager.getSettings()
-    return {
-      ENABLED: settings.interactionMonitor.enabled,
-      TRACK_CLICKS: DEFAULT_INTERACTION_MONITOR_CONFIG.TRACK_CLICKS,
-      TRACK_KEYBOARD: DEFAULT_INTERACTION_MONITOR_CONFIG.TRACK_KEYBOARD,
-      TRACK_SCROLL: DEFAULT_INTERACTION_MONITOR_CONFIG.TRACK_SCROLL,
-      TRACK_APP_CHANGE: DEFAULT_INTERACTION_MONITOR_CONFIG.TRACK_APP_CHANGE,
-      TYPING_SESSION_TIMEOUT_MS: settings.interactionMonitor.typingSessionTimeoutMs,
-      SCROLL_SESSION_TIMEOUT_MS: settings.interactionMonitor.scrollSessionTimeoutMs,
-      APP_CHANGE_POLL_MS: DEFAULT_INTERACTION_MONITOR_CONFIG.APP_CHANGE_POLL_MS,
-    }
-  }
-  return DEFAULT_INTERACTION_MONITOR_CONFIG
-}
 let typingSessionTimeoutId: NodeJS.Timeout | null = null
 let isTyping = false
 let typingSessionKeyCount = 0
@@ -64,9 +18,13 @@ let scrollSessionAmount = 0
 let scrollSessionDirection: 'vertical' | 'horizontal' = 'vertical'
 let scrollSessionStartTime = 0
 
+// Click throttle state
+let lastClickTime = 0
+
 // App change state
 let appChangeIntervalId: NodeJS.Timeout | null = null
 let previousWindow: { title: string; processName: string } | null = null
+let appChangeFailureSkips = 0
 
 // Callback for when interaction triggers a capture
 type OnInteractionCallback = (context: InteractionContext) => void
@@ -74,25 +32,28 @@ const interactionCallbacks: OnInteractionCallback[] = []
 
 /**
  * Handle mouse click events
- * Not debounced because we would loose chronological order of events
+ * Throttled to prevent rapid-fire captures from fast clicking
  */
 function handleMouseClick(event: UiohookMouseEvent): void {
-  const config = getConfig()
-  if (!config.TRACK_CLICKS) {
+  if (!INTERACTION_MONITOR_CONFIG.TRACK_CLICKS) {
     return
   }
 
-  // Schedule notification after delay (to let UI update)
+  const now = Date.now()
+  if (now - lastClickTime < INTERACTION_MONITOR_CONFIG.CLICK_THROTTLE_MS) {
+    return
+  }
+  lastClickTime = now
+
   const context: InteractionContext = {
     type: 'click',
-    timestamp: Date.now(),
+    timestamp: now,
     clickPosition: {
       x: event.x,
       y: event.y,
     },
   }
 
-  // Notify all callbacks
   interactionCallbacks.forEach((callback) => {
     try {
       callback(context)
@@ -107,8 +68,7 @@ function handleMouseClick(event: UiohookMouseEvent): void {
  * Tracks "typing sessions" - emits event when user pauses typing
  */
 function handleKeyboard(): void {
-  const config = getConfig()
-  if (!config.TRACK_KEYBOARD) {
+  if (!INTERACTION_MONITOR_CONFIG.TRACK_KEYBOARD) {
     return
   }
 
@@ -130,16 +90,14 @@ function handleKeyboard(): void {
   // Increment key count
   typingSessionKeyCount++
 
-  // Get current timeout value (reads live setting)
-  const typingTimeout = getConfig().TYPING_SESSION_TIMEOUT_MS
-
   // Set timeout to detect when typing stops
   typingSessionTimeoutId = setTimeout(() => {
     if (!isTyping) return
 
     isTyping = false
-    const endTime = Date.now() - typingTimeout
-    const durationMs = endTime - typingSessionStartTime - typingTimeout
+    const endTime = Date.now() - INTERACTION_MONITOR_CONFIG.TYPING_SESSION_TIMEOUT_MS
+    const durationMs =
+      endTime - typingSessionStartTime - INTERACTION_MONITOR_CONFIG.TYPING_SESSION_TIMEOUT_MS
 
     log.info(
       `[Interaction Monitor] Typing session ended: ${typingSessionKeyCount} keys over ${durationMs}ms`,
@@ -164,7 +122,7 @@ function handleKeyboard(): void {
     // Reset session tracking
     typingSessionKeyCount = 0
     typingSessionStartTime = 0
-  }, typingTimeout)
+  }, INTERACTION_MONITOR_CONFIG.TYPING_SESSION_TIMEOUT_MS)
 }
 
 /**
@@ -172,8 +130,7 @@ function handleKeyboard(): void {
  * Tracks "scroll sessions" - emits event when user pauses scrolling
  */
 function handleScroll(event: UiohookWheelEvent): void {
-  const config = getConfig()
-  if (!config.TRACK_SCROLL) {
+  if (!INTERACTION_MONITOR_CONFIG.TRACK_SCROLL) {
     return
   }
 
@@ -196,15 +153,12 @@ function handleScroll(event: UiohookWheelEvent): void {
   // Accumulate scroll amount
   scrollSessionAmount += event.rotation
 
-  // Get current timeout value (reads live setting)
-  const scrollTimeout = getConfig().SCROLL_SESSION_TIMEOUT_MS
-
   // Set timeout to detect when scrolling stops
   scrollSessionTimeoutId = setTimeout(() => {
     if (!isScrolling) return
 
     isScrolling = false
-    const endTime = Date.now() - scrollTimeout
+    const endTime = Date.now() - INTERACTION_MONITOR_CONFIG.SCROLL_SESSION_TIMEOUT_MS
     const durationMs = endTime - scrollSessionStartTime
 
     log.info(
@@ -230,7 +184,7 @@ function handleScroll(event: UiohookWheelEvent): void {
     // Reset session tracking
     scrollSessionAmount = 0
     scrollSessionStartTime = 0
-  }, scrollTimeout)
+  }, INTERACTION_MONITOR_CONFIG.SCROLL_SESSION_TIMEOUT_MS)
 }
 
 /**
@@ -238,8 +192,12 @@ function handleScroll(event: UiohookWheelEvent): void {
  * Called periodically by interval timer
  */
 async function checkAppChange(): Promise<void> {
-  const config = getConfig()
-  if (!config.TRACK_APP_CHANGE) {
+  if (!INTERACTION_MONITOR_CONFIG.TRACK_APP_CHANGE) {
+    return
+  }
+
+  if (appChangeFailureSkips > 0) {
+    appChangeFailureSkips--
     return
   }
 
@@ -284,7 +242,8 @@ async function checkAppChange(): Promise<void> {
     // Update previous window
     previousWindow = current
   } catch (error) {
-    log.error('[Interaction Monitor] Error checking active window:', error)
+    appChangeFailureSkips = INTERACTION_MONITOR_CONFIG.APP_CHANGE_FAILURE_SKIPS_N_POLLS_AFTER_ERROR
+    log.warn('[Interaction Monitor] Error checking active window, pausing for 3 polls:', error)
   }
 }
 
@@ -297,8 +256,7 @@ export function startInteractionMonitoring(): void {
     return
   }
 
-  const config = getConfig()
-  if (!config.ENABLED) {
+  if (!INTERACTION_MONITOR_CONFIG.ENABLED) {
     log.info('[Interaction Monitor] Disabled in config')
     return
   }
@@ -308,15 +266,15 @@ export function startInteractionMonitoring(): void {
     isRunning = true
 
     // Register event handlers
-    if (config.TRACK_CLICKS) {
+    if (INTERACTION_MONITOR_CONFIG.TRACK_CLICKS) {
       uIOhook.on('click', handleMouseClick)
     }
 
-    if (config.TRACK_KEYBOARD) {
+    if (INTERACTION_MONITOR_CONFIG.TRACK_KEYBOARD) {
       uIOhook.on('keydown', handleKeyboard)
     }
 
-    if (config.TRACK_SCROLL) {
+    if (INTERACTION_MONITOR_CONFIG.TRACK_SCROLL) {
       uIOhook.on('wheel', handleScroll)
     }
 
@@ -325,13 +283,13 @@ export function startInteractionMonitoring(): void {
     log.info('[Interaction Monitor] uiohook started successfully')
 
     // Start app change polling
-    if (config.TRACK_APP_CHANGE) {
+    if (INTERACTION_MONITOR_CONFIG.TRACK_APP_CHANGE) {
       // Initialize current window
       checkAppChange().catch(log.error)
 
       appChangeIntervalId = setInterval(() => {
         checkAppChange().catch(log.error)
-      }, config.APP_CHANGE_POLL_MS)
+      }, INTERACTION_MONITOR_CONFIG.APP_CHANGE_POLL_MS)
       log.info('[Interaction Monitor] App change polling started')
     }
   } catch (error) {
@@ -359,7 +317,9 @@ export function stopInteractionMonitoring(): void {
     isScrolling = false
     scrollSessionAmount = 0
     scrollSessionStartTime = 0
+    lastClickTime = 0
     previousWindow = null
+    appChangeFailureSkips = 0
 
     // Clear any pending typing session timeout
     if (typingSessionTimeoutId) {

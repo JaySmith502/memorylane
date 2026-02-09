@@ -35,7 +35,6 @@ import { EmbeddingService } from './processor/embedding'
 import { StorageService } from './processor/storage'
 import { SemanticClassifierService } from './processor/semantic-classifier'
 import { ApiKeyManager } from './settings/api-key-manager'
-import { CaptureSettingsManager } from './settings/capture-settings-manager'
 import { config as loadEnv } from 'dotenv'
 
 try {
@@ -103,24 +102,15 @@ if (isMCPMode) {
 
   let processor: EventProcessor | null = null
   let apiKeyManager: ApiKeyManager | null = null
-  let captureSettingsManager: CaptureSettingsManager | null = null
   let classifierService: SemanticClassifierService | null = null
 
   const initRecorderMode = async () => {
     // Dynamic imports for recorder-specific modules
     recorder = await import('./recorder/recorder')
     interactionMonitor = await import('./recorder/interaction-monitor')
-    const visualDetector = await import('./recorder/visual-detector')
 
     // Initialize API key manager for secure key storage
     apiKeyManager = new ApiKeyManager()
-
-    // Initialize capture settings manager
-    captureSettingsManager = new CaptureSettingsManager()
-
-    // Initialize recorder modules with settings manager
-    visualDetector.initVisualDetector(captureSettingsManager)
-    interactionMonitor.initInteractionMonitor(captureSettingsManager)
 
     // Initialize Processor Services
     const embeddingService = new EmbeddingService()

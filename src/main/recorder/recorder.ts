@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 import * as fs from 'fs'
 import * as path from 'path'
 import { Screenshot, OnScreenshotCallback, CaptureReason } from '../../shared/types'
+import { CAPTURE_RATE_CONFIG } from '@constants'
 import * as visualDetector from './visual-detector'
 import * as interactionMonitor from './interaction-monitor'
 import log from '../logger'
@@ -17,6 +18,8 @@ const CLEANUP_INTERVAL_MS = 30_000
 const screenshotCallbacks: OnScreenshotCallback[] = []
 let isCapturing = false
 let cleanupTimer: ReturnType<typeof setInterval> | null = null
+let lastCaptureTime = 0
+let isProcessingInteraction = false
 
 // Ensure screenshots directory exists
 function ensureScreenshotsDir(): void {
@@ -49,43 +52,45 @@ function cleanupOldScreenshots(): void {
   }
 }
 
+const FULL_RES_SIZE = { width: 1920 * 2, height: 1080 * 2 }
+const SAMPLE_SIZE = { width: 320, height: 180 }
+
 /**
- * Capture a screenshot from the primary display
+ * Capture the primary screen source at the given thumbnail resolution.
  */
-export async function captureNow(reason?: CaptureReason): Promise<Screenshot> {
-  ensureScreenshotsDir()
-
-  // Default reason if not provided
-  const captureReason: CaptureReason = reason || {
-    type: 'manual',
-  }
-
+async function captureScreen(thumbnailSize: {
+  width: number
+  height: number
+}): Promise<Electron.DesktopCapturerSource> {
   const sources = await desktopCapturer.getSources({
     types: ['screen'],
-    thumbnailSize: {
-      width: 1920 * 2, // Support high DPI displays
-      height: 1080 * 2,
-    },
+    thumbnailSize,
   })
 
-  if (sources.length === 0) {
-    throw new Error('No screen sources available for capture')
+  const primarySource = sources[0]
+  if (primarySource === undefined) {
+    throw new Error('No screen sources available')
   }
 
-  // Use the primary display (first source)
-  const primarySource = sources[0]
-  const thumbnail = primarySource.thumbnail
+  return primarySource
+}
 
-  // Generate screenshot metadata
+/**
+ * Save a screenshot from an already-captured source, notify callbacks, and return metadata.
+ */
+function saveScreenshotFromSource(
+  source: Electron.DesktopCapturerSource,
+  reason: CaptureReason,
+): Screenshot {
+  ensureScreenshotsDir()
+
+  const thumbnail = source.thumbnail
   const id = uuidv4()
   const timestamp = Date.now()
   const filename = `${timestamp}_${id}.png`
   const filepath = path.join(SCREENSHOTS_DIR, filename)
-
-  // Get actual thumbnail dimensions
   const size = thumbnail.getSize()
 
-  // Save the screenshot
   const pngBuffer = thumbnail.toPNG()
   fs.writeFileSync(filepath, pngBuffer)
 
@@ -94,16 +99,15 @@ export async function captureNow(reason?: CaptureReason): Promise<Screenshot> {
     filepath,
     timestamp,
     display: {
-      id: parseInt(primarySource.id.split(':')[1] || '0', 10),
+      id: parseInt(source.id.split(':')[1] || '0', 10),
       width: size.width,
       height: size.height,
     },
-    trigger: captureReason,
+    trigger: reason,
   }
 
-  log.info(`[Capture] Screenshot saved: ${filename} (reason: ${captureReason.type})`)
+  log.info(`[Capture] Screenshot saved: ${filename} (reason: ${reason.type})`)
 
-  // Notify all registered callbacks
   screenshotCallbacks.forEach((callback) => {
     try {
       callback(screenshot)
@@ -136,12 +140,14 @@ export function startCapture(): void {
   // Start interaction monitoring
   interactionMonitor.startInteractionMonitoring()
 
-  // Capture initial baseline screenshot and set it as baseline
-  captureNow({ type: 'manual' })
-    .then(async () => {
-      log.info('[Capture] Initial baseline screenshot captured')
-      await visualDetector.updateBaseline()
-      log.info('[Capture] Baseline set')
+  // Capture initial baseline screenshot and derive baseline from same capture
+  captureScreen(FULL_RES_SIZE)
+    .then((source) => {
+      const sampleBitmap = source.thumbnail.resize(SAMPLE_SIZE).toBitmap()
+      visualDetector.updateBaselineFromBitmap(sampleBitmap)
+
+      saveScreenshotFromSource(source, { type: 'manual' })
+      log.info('[Capture] Initial baseline screenshot captured and baseline set')
     })
     .catch((error) => {
       log.error('[Capture] Failed to capture initial baseline:', error)
@@ -149,29 +155,53 @@ export function startCapture(): void {
 
   // Register interaction monitor callback
   interactionMonitor.onInteraction(async (context) => {
-    log.info(`[Capture] Interaction detected: ${context.type}`)
+    const now = Date.now()
+    const timeSinceLastCapture = now - lastCaptureTime
 
-    // Check visual change against baseline
-    const result = await visualDetector.checkAgainstBaseline()
-
-    if (result.changed) {
+    if (timeSinceLastCapture < CAPTURE_RATE_CONFIG.MIN_CAPTURE_INTERVAL_MS) {
       log.info(
-        `[Capture] Visual change detected (${result.difference.toFixed(1)}%) - capturing new screenshot`,
+        `[Capture] Interaction skipped (cooldown: ${timeSinceLastCapture}ms < ${CAPTURE_RATE_CONFIG.MIN_CAPTURE_INTERVAL_MS}ms)`,
       )
+      return
+    }
 
-      // Capture new screenshot
-      await captureNow({
-        type: 'baseline_change',
-        confidence: result.difference,
-      })
+    if (isProcessingInteraction) {
+      log.info('[Capture] Interaction skipped (already processing)')
+      return
+    }
 
-      // Update baseline to new screenshot
-      await visualDetector.updateBaseline()
-      log.info('[Capture] Baseline updated to new screenshot')
-    } else {
-      log.info(
-        `[Capture] No significant change (${result.difference.toFixed(1)}%) - keeping current baseline`,
-      )
+    isProcessingInteraction = true
+
+    try {
+      log.info(`[Capture] Interaction detected: ${context.type}`)
+
+      const source = await captureScreen(SAMPLE_SIZE)
+      const sampleBitmap = source.thumbnail.toBitmap()
+
+      const result = visualDetector.checkBitmapAgainstBaseline(sampleBitmap)
+
+      if (result.changed) {
+        log.info(
+          `[Capture] Visual change detected (${result.difference.toFixed(1)}%) - capturing full-res screenshot`,
+        )
+
+        const fullSource = await captureScreen(FULL_RES_SIZE)
+        saveScreenshotFromSource(fullSource, {
+          type: 'baseline_change',
+          confidence: result.difference,
+        })
+
+        lastCaptureTime = Date.now()
+
+        visualDetector.updateBaselineFromBitmap(sampleBitmap)
+        log.info('[Capture] Baseline updated to new screenshot')
+      } else {
+        log.info(
+          `[Capture] No significant change (${result.difference.toFixed(1)}%) - keeping current baseline`,
+        )
+      }
+    } finally {
+      isProcessingInteraction = false
     }
   })
 }
@@ -187,6 +217,8 @@ export function stopCapture(): void {
 
   log.info('[Capture] Stopping screenshot capture')
   isCapturing = false
+  lastCaptureTime = 0
+  isProcessingInteraction = false
 
   // Stop periodic cleanup
   if (cleanupTimer) {

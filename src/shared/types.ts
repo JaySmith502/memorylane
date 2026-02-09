@@ -67,18 +67,6 @@ export interface SearchOptions extends SearchFilters {
   limit?: number | undefined
 }
 
-export interface CaptureSettings {
-  visualDetector: {
-    enabled: boolean
-    dhashThresholdPercent: number
-  }
-  interactionMonitor: {
-    enabled: boolean
-    typingSessionTimeoutMs: number
-    scrollSessionTimeoutMs: number
-  }
-}
-
 export interface KeyStatus {
   hasKey: boolean
   source: 'stored' | 'env' | 'none'
@@ -98,17 +86,6 @@ export interface SettingsAPI {
   openExternal: (url: string) => Promise<void>
   addToClaude: () => Promise<void>
   addToCursor: () => Promise<void>
-}
-
-export interface CaptureSettingsResponse {
-  settings: CaptureSettings
-  defaults: CaptureSettings
-}
-
-export interface CaptureSettingsAPI {
-  get: () => Promise<CaptureSettingsResponse>
-  save: (partialSettings: Partial<CaptureSettings>) => Promise<SaveResult>
-  reset: () => Promise<SaveResult>
 }
 
 export interface MainWindowStatus {

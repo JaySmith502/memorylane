@@ -4,6 +4,7 @@ import { EmbeddingService } from './embedding'
 import { StorageService, StoredEvent } from './storage'
 import { Screenshot, InteractionContext, SearchOptions, SearchFilters } from '../../shared/types'
 import { SemanticClassifierService } from './semantic-classifier'
+import { CAPTURE_RATE_CONFIG } from '@constants'
 import log from '../logger'
 
 export class EventProcessor {
@@ -17,6 +18,14 @@ export class EventProcessor {
   // Classification state - track START screenshot for START/END pairs
   private startScreenshot: Screenshot | null = null
   private startOcrText = ''
+
+  // Processing queue to limit concurrent screenshot processing (prevents too many OCR/LLM subprocesses)
+  private processingQueue: Array<{
+    screenshot: Screenshot
+    resolve: () => void
+    reject: (error: unknown) => void
+  }> = []
+  private activeProcessingCount = 0
 
   constructor(
     embeddingService: EmbeddingService,
@@ -37,6 +46,40 @@ export class EventProcessor {
   }
 
   /**
+   * Enqueue a screenshot for processing. Concurrency is limited by
+   * MAX_CONCURRENT_PROCESSING to prevent too many OCR subprocesses.
+   */
+  public async processScreenshot(screenshot: Screenshot): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      this.processingQueue.push({ screenshot, resolve, reject })
+      log.info(
+        `[EventProcessor] Queued screenshot ${screenshot.id} (queue size: ${this.processingQueue.length}, active: ${this.activeProcessingCount})`,
+      )
+      void this.drainQueue()
+    })
+  }
+
+  /**
+   * Process queued screenshots up to MAX_CONCURRENT_PROCESSING at a time.
+   */
+  private async drainQueue(): Promise<void> {
+    const maxConcurrent = CAPTURE_RATE_CONFIG.MAX_CONCURRENT_PROCESSING
+
+    while (this.processingQueue.length > 0 && this.activeProcessingCount < maxConcurrent) {
+      const item = this.processingQueue.shift()!
+      this.activeProcessingCount++
+
+      void this.processScreenshotInternal(item.screenshot)
+        .then(() => item.resolve())
+        .catch((error) => item.reject(error))
+        .finally(() => {
+          this.activeProcessingCount--
+          void this.drainQueue()
+        })
+    }
+  }
+
+  /**
    * Main pipeline: OCR -> Embed -> Store -> Classification -> Cleanup
    *
    * Flow:
@@ -47,7 +90,7 @@ export class EventProcessor {
    * 5. Classification runs (needs both screenshot files)
    * 6. Delete screenshot files after classification (or immediately if no classifier)
    */
-  public async processScreenshot(screenshot: Screenshot): Promise<void> {
+  private async processScreenshotInternal(screenshot: Screenshot): Promise<void> {
     const { filepath, id } = screenshot
 
     // Grab pending events and reset for next screenshot
