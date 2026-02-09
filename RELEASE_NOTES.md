@@ -1,6 +1,14 @@
-# MemoryLane v0.1.0 — First Alpha Release
+# MemoryLane v0.2.0
 
 MemoryLane is a macOS system tray app that captures your screen activity, processes it with OCR and AI summarization, and makes it searchable through an MCP server — giving AI assistants like Claude and Cursor memory of what you've been working on.
+
+## What's Changed
+
+- **Performance improvements** — addressed resource-intensive capture and processing issues with debouncing, max capture rate limiting, and fewer screenshots (closes [#3](https://github.com/deusXmachina-dev/memorylane/issues/3))
+- **Single-node-env migration** — all scripts and tests now run under Electron's Node.js runtime, eliminating ABI mismatch errors
+- **"Add to Claude Code" button** — one-click MCP server registration for Claude Code from the tray menu
+- **SQLite vector size fix** — resolved max vector size issue for sqlite-vec
+- **Build and test fixes** — improved stability and reliability
 
 ## Features
 
@@ -16,14 +24,13 @@ MemoryLane is a macOS system tray app that captures your screen activity, proces
 
 ## Known Issues & Limitations
 
-- **Performance** — capture and processing can be resource-intensive, especially with frequent visual changes ([#3](https://github.com/deusXmachina-dev/memorylane/issues/3))
 - **Single display only** — currently captures from one screen; multi-monitor support is not yet implemented ([#4](https://github.com/deusXmachina-dev/memorylane/issues/4))
 - **Not notarized** — the app is code-signed but not Apple-notarized yet; you'll need to right-click → Open on first launch to bypass Gatekeeper ([#5](https://github.com/deusXmachina-dev/memorylane/issues/5))
 - **macOS ARM64 only** — this release includes a macOS Apple Silicon DMG only; Intel Mac, Windows, and Linux builds are not yet available
 
 ## Installation
 
-1. Download `MemoryLane-0.1.0-arm64.dmg`
+1. Download `MemoryLane-0.2.0-arm64.dmg`
 2. Open the DMG and drag MemoryLane to Applications
 3. Double-click the app to open it — you'll see a warning that it can't be opened because Apple cannot check it for malicious software
 4. Go to **System Settings → Privacy & Security**, scroll down, and click **"Open Anyway"** next to the MemoryLane message
@@ -34,4 +41,4 @@ MemoryLane is a macOS system tray app that captures your screen activity, proces
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/commits/v0.1.0
+https://github.com/deusXmachina-dev/memorylane/commits/v0.2.0
