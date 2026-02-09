@@ -141,14 +141,15 @@ if (isMCPMode) {
 
     await initRecorderMode()
 
-    const { setupTray } = await import('./ui/tray')
+    const { setupTray, updateTrayMenu } = await import('./ui/tray')
     setupTray({
       recorder,
       interactionMonitor,
       processor: processor!,
     })
 
-    const { initMainWindowIPC, openMainWindow } = await import('./ui/main-window')
+    const { initMainWindowIPC, openMainWindow, sendStatusToRenderer } =
+      await import('./ui/main-window')
     initMainWindowIPC({
       recorder,
       interactionMonitor,
@@ -157,6 +158,23 @@ if (isMCPMode) {
       classifierService: classifierService!,
     })
     openMainWindow()
+
+    // Wire up event handlers for screenshot processing and interaction monitoring
+    recorder.onScreenshot(async (screenshot) => {
+      log.info(`[Main] Screenshot captured: ${screenshot.id}`)
+      try {
+        await processor!.processScreenshot(screenshot)
+        log.info(`[Main] Screenshot processed successfully: ${screenshot.id}`)
+        void updateTrayMenu()
+        void sendStatusToRenderer()
+      } catch (error) {
+        log.error(`[Main] Error processing screenshot ${screenshot.id}:`, error)
+      }
+    })
+
+    interactionMonitor.onInteraction((event) => {
+      processor!.addInteractionEvent(event)
+    })
 
     app.on('activate', () => {
       openMainWindow()

@@ -8,7 +8,6 @@ import log from '../logger'
 import { formatBytes, formatNumber } from '../utils/formatters'
 import { registerWithClaudeDesktop } from '../integrations/claude-desktop'
 import { registerWithCursor } from '../integrations/cursor'
-import { Screenshot, InteractionContext } from '../../shared/types'
 import type { EventProcessor } from '../processor/index'
 import { sendStatusToRenderer, openMainWindow } from './main-window'
 
@@ -18,11 +17,9 @@ interface TrayDependencies {
     startCapture: () => void
     stopCapture: () => void
     getScreenshotsDir: () => string
-    onScreenshot: (callback: (screenshot: Screenshot) => void) => void
   }
   interactionMonitor: {
     stopInteractionMonitoring: () => void
-    onInteraction: (callback: (event: InteractionContext) => void) => void
   }
   processor: EventProcessor
 }
@@ -178,7 +175,6 @@ export const updateTrayMenu = async (): Promise<void> => {
 
 /**
  * Setup the system tray with icon, tooltip, and menu
- * Registers callbacks for screenshot and interaction events
  */
 export const setupTray = (dependencies: TrayDependencies): void => {
   deps = dependencies
@@ -205,27 +201,4 @@ export const setupTray = (dependencies: TrayDependencies): void => {
   tray.setToolTip('MemoryLane - Screen Capture')
 
   void updateTrayMenu()
-
-  // Register a callback to process screenshots
-  deps.recorder.onScreenshot(async (screenshot: Screenshot) => {
-    log.info(`[Main] Screenshot captured: ${screenshot.id}`)
-
-    if (deps?.processor) {
-      try {
-        await deps.processor.processScreenshot(screenshot)
-        log.info(`[Main] Screenshot processed successfully: ${screenshot.id}`)
-        void updateTrayMenu()
-        void sendStatusToRenderer()
-      } catch (error) {
-        log.error(`[Main] Error processing screenshot ${screenshot.id}:`, error)
-      }
-    }
-  })
-
-  // Subscribe to interaction events - pass them to the processor for aggregation
-  deps.interactionMonitor.onInteraction((event) => {
-    if (deps?.processor) {
-      deps.processor.addInteractionEvent(event)
-    }
-  })
 }

@@ -40,6 +40,7 @@ function hammingDistance(hash1: string | null, hash2: string | null): number {
   if (hash1 == null || hash2 == null) return 100
 
   if (hash1.length !== hash2.length) {
+    log.error('Hashes must be the same length', { hash1: hash1.length, hash2: hash2.length })
     throw new Error('Hashes must be the same length')
   }
 

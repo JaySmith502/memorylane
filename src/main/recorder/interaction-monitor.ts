@@ -54,6 +54,9 @@ function handleMouseClick(event: UiohookMouseEvent): void {
     },
   }
 
+  console.log('len of interactionCallbacks', interactionCallbacks.length)
+  console.log('callbacks', interactionCallbacks)
+
   interactionCallbacks.forEach((callback) => {
     try {
       callback(context)

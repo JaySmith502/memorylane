@@ -76,6 +76,16 @@ async function captureScreen(thumbnailSize: {
 }
 
 /**
+ * Capture a low-resolution sample bitmap for visual change detection.
+ * Uses a dedicated capture at SAMPLE_SIZE so the bitmap dimensions are consistent
+ * (desktopCapturer treats thumbnailSize as a bounding box, not an exact size).
+ */
+async function captureSampleBitmap(): Promise<Buffer> {
+  const source = await captureScreen(SAMPLE_SIZE)
+  return source.thumbnail.toBitmap()
+}
+
+/**
  * Save a screenshot from an already-captured source, notify callbacks, and return metadata.
  */
 function saveScreenshotFromSource(
@@ -140,14 +150,13 @@ export function startCapture(): void {
   // Start interaction monitoring
   interactionMonitor.startInteractionMonitoring()
 
-  // Capture initial baseline screenshot and derive baseline from same capture
-  captureScreen(FULL_RES_SIZE)
-    .then((source) => {
-      const sampleBitmap = source.thumbnail.resize(SAMPLE_SIZE).toBitmap()
+  // Capture initial baseline screenshot and derive baseline from a separate sample capture
+  Promise.all([captureScreen(FULL_RES_SIZE), captureSampleBitmap()])
+    .then(([fullSource, sampleBitmap]) => {
       visualDetector.updateBaselineFromBitmap(sampleBitmap)
 
-      saveScreenshotFromSource(source, { type: 'manual' })
-      log.info('[Capture] Initial baseline screenshot captured and baseline set')
+      saveScreenshotFromSource(fullSource, { type: 'manual' })
+      log.info('[Capture] Initial baseline screenshot captured')
     })
     .catch((error) => {
       log.error('[Capture] Failed to capture initial baseline:', error)
@@ -175,9 +184,7 @@ export function startCapture(): void {
     try {
       log.info(`[Capture] Interaction detected: ${context.type}`)
 
-      const source = await captureScreen(SAMPLE_SIZE)
-      const sampleBitmap = source.thumbnail.toBitmap()
-
+      const sampleBitmap = await captureSampleBitmap()
       const result = visualDetector.checkBitmapAgainstBaseline(sampleBitmap)
 
       if (result.changed) {
