@@ -20,6 +20,7 @@ extraResources:
     filter:
       - '*.swift'
 
+buildDependenciesFromSource: true
 asar: true
 asarUnpack:
   - 'node_modules/uiohook-napi/**/*'
