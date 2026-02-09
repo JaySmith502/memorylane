@@ -1,3 +1,4 @@
+import { screen } from 'electron'
 import { uIOhook, UiohookMouseEvent, UiohookWheelEvent } from 'uiohook-napi'
 import activeWin from 'active-win'
 import { INTERACTION_MONITOR_CONFIG } from '@constants'
@@ -26,6 +27,16 @@ let appChangeIntervalId: NodeJS.Timeout | null = null
 let previousWindow: { title: string; processName: string } | null = null
 let appChangeFailureSkips = 0
 
+// Display resolution state (updated by app-change poller, used by keyboard/scroll handlers)
+let cachedDisplayId: number | null = null
+
+/**
+ * Resolve which Electron Display contains the given global coordinate.
+ */
+function getDisplayIdForPoint(x: number, y: number): number {
+  return screen.getDisplayNearestPoint({ x, y }).id
+}
+
 // Callback for when interaction triggers a capture
 type OnInteractionCallback = (context: InteractionContext) => void
 const interactionCallbacks: OnInteractionCallback[] = []
@@ -45,9 +56,12 @@ function handleMouseClick(event: UiohookMouseEvent): void {
   }
   lastClickTime = now
 
+  const displayId = getDisplayIdForPoint(event.x, event.y)
+
   const context: InteractionContext = {
     type: 'click',
     timestamp: now,
+    displayId,
     clickPosition: {
       x: event.x,
       y: event.y,
@@ -106,6 +120,7 @@ function handleKeyboard(): void {
     const context: InteractionContext = {
       type: 'keyboard',
       timestamp: endTime,
+      displayId: cachedDisplayId ?? undefined,
       keyCount: typingSessionKeyCount,
       durationMs: durationMs,
     }
@@ -168,6 +183,7 @@ function handleScroll(event: UiohookWheelEvent): void {
     const context: InteractionContext = {
       type: 'scroll',
       timestamp: endTime,
+      displayId: cachedDisplayId ?? undefined,
       scrollDirection: scrollSessionDirection,
       scrollAmount: scrollSessionAmount,
     }
@@ -213,6 +229,10 @@ async function checkAppChange(): Promise<void> {
       processName: currentWindow.owner.name,
     }
 
+    const centerX = currentWindow.bounds.x + currentWindow.bounds.width / 2
+    const centerY = currentWindow.bounds.y + currentWindow.bounds.height / 2
+    cachedDisplayId = getDisplayIdForPoint(centerX, centerY)
+
     // Check if window has changed
     if (
       previousWindow &&
@@ -225,6 +245,7 @@ async function checkAppChange(): Promise<void> {
       const context: InteractionContext = {
         type: 'app_change',
         timestamp: Date.now(),
+        displayId: cachedDisplayId,
         activeWindow: current,
         previousWindow: previousWindow,
       }
@@ -321,6 +342,7 @@ export function stopInteractionMonitoring(): void {
     lastClickTime = 0
     previousWindow = null
     appChangeFailureSkips = 0
+    cachedDisplayId = null
 
     // Clear any pending typing session timeout
     if (typingSessionTimeoutId) {

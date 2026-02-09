@@ -61,23 +61,35 @@ const FULL_RES_SIZE = { width: 1920 * 2, height: 1080 * 2 }
 const SAMPLE_SIZE = { width: 320, height: 180 }
 
 /**
- * Capture the primary screen source at the given thumbnail resolution.
+ * Capture a screen source at the given thumbnail resolution.
+ * When displayId is provided, captures the matching display; otherwise falls back to the
+ * first available source (primary display).
  */
-async function captureScreen(thumbnailSize: {
-  width: number
-  height: number
-}): Promise<Electron.DesktopCapturerSource> {
+async function captureScreen(
+  thumbnailSize: { width: number; height: number },
+  displayId?: number,
+): Promise<Electron.DesktopCapturerSource> {
   const sources = await desktopCapturer.getSources({
     types: ['screen'],
     thumbnailSize,
   })
 
-  const primarySource = sources[0]
-  if (primarySource === undefined) {
+  const source =
+    (displayId !== undefined
+      ? sources.find((s) => s.display_id === String(displayId))
+      : undefined) ?? sources[0]
+
+  if (source === undefined) {
     throw new Error('No screen sources available')
   }
 
-  return primarySource
+  log.debug(
+    `[Capture] captureScreen: requested display=${displayId ?? 'any'}, ` +
+      `matched source=${source.id} (display_id=${source.display_id}), ` +
+      `available sources=[${sources.map((s) => s.display_id).join(', ')}]`,
+  )
+
+  return source
 }
 
 /**
@@ -85,8 +97,8 @@ async function captureScreen(thumbnailSize: {
  * Uses a dedicated capture at SAMPLE_SIZE so the bitmap dimensions are consistent
  * (desktopCapturer treats thumbnailSize as a bounding box, not an exact size).
  */
-async function captureSampleBitmap(): Promise<Buffer> {
-  const source = await captureScreen(SAMPLE_SIZE)
+async function captureSampleBitmap(displayId?: number): Promise<Buffer> {
+  const source = await captureScreen(SAMPLE_SIZE, displayId)
   return source.thumbnail.toBitmap()
 }
 
@@ -112,9 +124,11 @@ async function handleInteraction(context: InteractionContext): Promise<void> {
   isProcessingInteraction = true
 
   try {
-    log.info(`[Capture] Interaction detected: ${context.type}`)
+    log.info(
+      `[Capture] Interaction detected: ${context.type} (display: ${context.displayId ?? 'unknown'})`,
+    )
 
-    const sampleBitmap = await captureSampleBitmap()
+    const sampleBitmap = await captureSampleBitmap(context.displayId)
     const result = visualDetector.checkBitmapAgainstBaseline(sampleBitmap)
 
     if (result.changed) {
@@ -122,7 +136,7 @@ async function handleInteraction(context: InteractionContext): Promise<void> {
         `[Capture] Visual change detected (${result.difference.toFixed(1)}%) - capturing full-res screenshot`,
       )
 
-      const fullSource = await captureScreen(FULL_RES_SIZE)
+      const fullSource = await captureScreen(FULL_RES_SIZE, context.displayId)
       saveScreenshotFromSource(fullSource, {
         type: 'baseline_change',
         confidence: result.difference,
@@ -174,6 +188,10 @@ function saveScreenshotFromSource(
   }
 
   log.info(`[Capture] Screenshot saved: ${filename} (reason: ${reason.type})`)
+  log.debug(
+    `[Capture] Screenshot details: display=${screenshot.display.id}, ` +
+      `size=${size.width}x${size.height}, source=${source.id}`,
+  )
 
   screenshotCallbacks.forEach((callback) => {
     try {

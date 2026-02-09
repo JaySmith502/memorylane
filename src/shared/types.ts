@@ -19,6 +19,7 @@ export interface CaptureReason {
 export interface InteractionContext {
   type: 'click' | 'keyboard' | 'scroll' | 'app_change'
   timestamp: number
+  displayId?: number // Electron Display.id of the screen where the interaction occurred
 
   // Click-specific
   clickPosition?: { x: number; y: number }
