@@ -110,7 +110,6 @@ That said, we'd love to see someone prove us wrong — it's one reason we open-s
 ## Coming Soon
 
 - **Apple notarization** — seamless install without Gatekeeper warnings
-- **Multi-monitor support** — capture from all connected displays
 - **Browser integration** — deeper context from browser tabs and web apps
 - **Managed cloud service** — hosted version with richer integrations, online LLM tool access, and zero setup
 - **Cross-platform builds** — Intel Mac, Windows, and Linux support
