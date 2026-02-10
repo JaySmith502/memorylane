@@ -1,14 +1,16 @@
-# MemoryLane v0.3.0
+# MemoryLane v0.3.1
 
 MemoryLane is a macOS system tray app that captures your screen activity, processes it with OCR and AI summarization, and makes it searchable through an MCP server — giving AI assistants like Claude and Cursor memory of what you've been working on.
 
 ## What's Changed
 
-- **Multi-screen capture** — captures from all connected displays, not just the primary screen (closes [#4](https://github.com/deusXmachina-dev/memorylane/issues/4))
-- **Different-size screen handling** — correctly captures screens with different resolutions and dimensions
+- **Curl-based installer** — no more Gatekeeper warnings; install with a single command instead of manually approving the app in System Settings
+- **Subscription groundwork** — device identity, managed API key provisioning, and Stripe checkout flow (not yet user-facing)
+- **UI polish** — improved subscribe and key management sections
 
 ## Features
 
+- **One-command install** — `curl | sh` installer that downloads, installs, and removes quarantine automatically
 - **Multi-screen capture** — captures screenshots from all connected displays simultaneously
 - **Event-driven screen capture** — captures screenshots based on user interactions (clicks, typing, scrolling, app switches) and visual changes (perceptual dHash comparison), not fixed intervals
 - **OCR via macOS Vision** — extracts text from screenshots using the native Vision framework (Swift sidecar)
@@ -42,4 +44,4 @@ After launching:
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/commits/v0.3.0
+https://github.com/deusXmachina-dev/memorylane/commits/v0.3.1
