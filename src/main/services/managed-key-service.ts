@@ -4,10 +4,13 @@ import { MANAGED_KEY_CONFIG } from '../../shared/constants'
 import type { DeviceIdentity } from '../settings/device-identity'
 import type { SubscriptionStatus } from '../../shared/types'
 
-export type ManagedKeyCallback = (
-  status: SubscriptionStatus,
-  payload?: { error?: string; key?: string },
-) => void
+interface ManagedKeyPayload {
+  error?: string
+  key?: string
+  invalidate?: boolean
+}
+
+export type ManagedKeyCallback = (status: SubscriptionStatus, payload?: ManagedKeyPayload) => void
 
 export class ManagedKeyService {
   private readonly deviceIdentity: DeviceIdentity
@@ -30,11 +33,22 @@ export class ManagedKeyService {
 
   /**
    * Try fetching a provisioned key once (e.g. on app startup).
-   * Silently does nothing if no key is available yet.
+   * If the backend returns an OK response with no key, signals invalidation
+   * so the caller can remove a stale locally-stored managed key.
    */
   public async tryFetchKey(): Promise<void> {
-    const deviceId = this.deviceIdentity.getDeviceId()
-    await this.pollForKey(deviceId)
+    try {
+      const key = await this.fetchKey(this.deviceIdentity.getDeviceId())
+      if (key) {
+        log.info('[ManagedKeyService] Received provisioned key')
+        this.setStatus('idle', { key })
+      } else {
+        log.info('[ManagedKeyService] No key from backend, invalidating local managed key')
+        this.setStatus('idle', { invalidate: true })
+      }
+    } catch (error) {
+      log.warn('[ManagedKeyService] Initial fetch failed:', error)
+    }
   }
 
   /**
@@ -60,6 +74,20 @@ export class ManagedKeyService {
     this.startPolling(deviceId)
   }
 
+  /**
+   * Open the subscription management portal in the system browser.
+   */
+  public async openSubscriptionPortal(): Promise<void> {
+    const deviceId = this.deviceIdentity.getDeviceId()
+
+    const url = new URL('/api/subscription/portal', MANAGED_KEY_CONFIG.BACKEND_URL)
+    url.searchParams.set('device_id', deviceId)
+
+    await shell.openExternal(url.toString())
+
+    log.info('[ManagedKeyService] Opened subscription portal in system browser')
+  }
+
   public cancelPolling(): void {
     this.clearTimers()
     this.setStatus('idle')
@@ -81,32 +109,41 @@ export class ManagedKeyService {
   }
 
   private async pollForKey(deviceId: string): Promise<void> {
-    const url = new URL('/api/subscription/key', MANAGED_KEY_CONFIG.BACKEND_URL)
-    url.searchParams.set('device_id', deviceId)
-
     try {
-      const response = await fetch(url.toString())
-
-      if (!response.ok) {
-        if (response.status >= 500) {
-          log.warn(`[ManagedKeyService] Server error during poll: ${response.status}`)
-        }
-        return
-      }
-
-      const data = (await response.json()) as { key?: string | null }
-
-      if (data.key) {
+      const key = await this.fetchKey(deviceId)
+      if (key) {
         log.info('[ManagedKeyService] Received provisioned key')
         this.clearTimers()
-        this.setStatus('idle', { key: data.key })
+        this.setStatus('idle', { key })
       }
     } catch (error) {
       log.warn('[ManagedKeyService] Poll request failed:', error)
     }
   }
 
-  private setStatus(status: SubscriptionStatus, payload?: { error?: string; key?: string }): void {
+  /**
+   * Fetch the provisioned key from the backend.
+   * Returns the API key string, or null if no key is provisioned.
+   * Throws on network errors or non-OK responses that aren't server errors.
+   */
+  private async fetchKey(deviceId: string): Promise<string | null> {
+    const url = new URL('/api/subscription/key', MANAGED_KEY_CONFIG.BACKEND_URL)
+    url.searchParams.set('device_id', deviceId)
+
+    const response = await fetch(url.toString())
+
+    if (!response.ok) {
+      if (response.status >= 500) {
+        log.warn(`[ManagedKeyService] Server error: ${response.status}`)
+      }
+      return null
+    }
+
+    const data = (await response.json()) as { key?: string | null }
+    return data.key ?? null
+  }
+
+  private setStatus(status: SubscriptionStatus, payload?: ManagedKeyPayload): void {
     this.status = status
     this.onUpdate?.(status, payload)
   }

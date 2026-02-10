@@ -121,6 +121,7 @@ export interface MainWindowAPI {
   addToClaudeCode: () => Promise<void>
   // Subscription
   startCheckout: () => Promise<void>
+  openSubscriptionPortal: () => Promise<void>
   getSubscriptionStatus: () => Promise<SubscriptionStatus>
   onSubscriptionUpdate: (callback: (update: SubscriptionUpdate) => void) => void
   // Stats

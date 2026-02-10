@@ -223,6 +223,11 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       deps.apiKeyManager.saveApiKey(payload.key, 'managed')
       deps.classifierService.updateApiKey(payload.key)
     }
+    if (payload?.invalidate && deps && deps.apiKeyManager.getKeySource() === 'managed') {
+      log.info('[MainWindow] Invalidating stale managed key')
+      deps.apiKeyManager.deleteApiKey()
+      deps.classifierService.updateApiKey(null)
+    }
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('main-window:subscriptionUpdate', {
         status,
@@ -234,6 +239,11 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   ipcMain.handle('main-window:startCheckout', async () => {
     if (!deps) return
     await deps.managedKeyService.startCheckout()
+  })
+
+  ipcMain.handle('main-window:openSubscriptionPortal', async () => {
+    if (!deps) return
+    await deps.managedKeyService.openSubscriptionPortal()
   })
 
   ipcMain.handle('main-window:getSubscriptionStatus', () => {

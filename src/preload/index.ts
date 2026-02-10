@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   addToClaudeCode: () => ipcRenderer.invoke('main-window:addToClaudeCode'),
   // Subscription
   startCheckout: () => ipcRenderer.invoke('main-window:startCheckout'),
+  openSubscriptionPortal: () => ipcRenderer.invoke('main-window:openSubscriptionPortal'),
   getSubscriptionStatus: () => ipcRenderer.invoke('main-window:getSubscriptionStatus'),
   onSubscriptionUpdate: (callback: (update: unknown) => void) => {
     ipcRenderer.on('main-window:subscriptionUpdate', (_event, update) => callback(update))

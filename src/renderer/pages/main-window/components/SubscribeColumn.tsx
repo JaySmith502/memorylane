@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@components/ui/card'
@@ -12,14 +12,17 @@ interface SubscribeColumnProps {
 
 export function SubscribeColumn({ api, onKeySet }: SubscribeColumnProps): React.JSX.Element {
   const [status, setStatus] = useState<SubscriptionStatus>('idle')
+  const statusRef = useRef(status)
+  statusRef.current = status
 
   useEffect(() => {
-    void api.getSubscriptionStatus().then(setStatus)
+    void api.getSubscriptionStatus().then((s) => {
+      setStatus(s)
+      statusRef.current = s
+    })
 
     api.onSubscriptionUpdate((update) => {
-      setStatus(update.status)
-
-      if (update.status === 'idle' && status !== 'idle') {
+      if (update.status === 'idle' && statusRef.current !== 'idle') {
         toast.success('API key provisioned successfully')
         onKeySet()
       }
@@ -27,8 +30,11 @@ export function SubscribeColumn({ api, onKeySet }: SubscribeColumnProps): React.
       if (update.status === 'error' && update.error) {
         toast.error(update.error)
       }
+
+      setStatus(update.status)
+      statusRef.current = update.status
     })
-  }, [api, onKeySet, status])
+  }, [api, onKeySet])
 
   const handleSubscribe = useCallback(async () => {
     try {

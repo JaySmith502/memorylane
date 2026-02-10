@@ -29,6 +29,8 @@ export function ManageKeySection({
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
+  const isManaged = keyStatus.source === 'managed'
+
   const handleSave = useCallback(async () => {
     const key = inputValue.trim()
     if (key === '') {
@@ -71,6 +73,14 @@ export function ManageKeySection({
     }
   }, [api, onKeyDeleted])
 
+  const handleManageSubscription = useCallback(async () => {
+    try {
+      await api.openSubscriptionPortal()
+    } catch {
+      toast.error('Failed to open subscription portal')
+    }
+  }, [api])
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Enter') {
@@ -93,12 +103,18 @@ export function ManageKeySection({
             <span className="text-xs text-muted-foreground">(from env)</span>
           )}
         </div>
-        <Button variant="ghost" size="sm" onClick={() => setExpanded(!expanded)}>
-          {expanded ? 'Cancel' : 'Manage Key'}
-        </Button>
+        {isManaged ? (
+          <Button variant="ghost" size="sm" onClick={() => void handleManageSubscription()}>
+            Manage Subscription
+          </Button>
+        ) : (
+          <Button variant="ghost" size="sm" onClick={() => setExpanded(!expanded)}>
+            {expanded ? 'Cancel' : 'Manage Key'}
+          </Button>
+        )}
       </div>
 
-      {expanded && (
+      {!isManaged && expanded && (
         <div className="space-y-3 pt-2 border-t">
           <div className="relative">
             <Input
