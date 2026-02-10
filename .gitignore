@@ -99,7 +99,7 @@ out/
 dist/
 dist-ssr/
 dist-electron/
-release/
+/release/
 
 # Temporary files
 tmp/
