@@ -22,6 +22,16 @@ Desktop app that sees what you see, stores summaries about it locally and lets y
   <img src="assets/readme/claude-2.jpeg" width="32%" />
 </p>
 
+### Example queries
+
+Once connected, try asking your AI assistant things like:
+
+- "What was I working on this morning?"
+- "Pick up where I left off on the auth refactor"
+- "Summarize my research on **\_** from last week"
+- "List the design frameworks I looked at recently"
+- "When did I last review PR #142?"
+
 ## Privacy & Permissions
 
 MemoryLane captures your screen to give AI assistants context about what you're working on. Here's what that means in plain terms:
@@ -79,16 +89,6 @@ Click the MemoryLane icon in your menu bar and select **Start Capture**. The app
 From the tray menu, click **Add to Claude Desktop**, **Add to Claude Code**, or **Add to Cursor**. This registers MemoryLane as an MCP server so your AI assistant can query your activity history.
 
 You can also set it up manually by pointing your MCP client to the MemoryLane server binary.
-
-### Example queries
-
-Once connected, try asking your AI assistant things like:
-
-- "What was I working on this morning?"
-- "Pick up where I left off on the auth refactor"
-- "Summarize my research on **\_** from last week"
-- "List the design frameworks I looked at recently"
-- "When did I last review PR #142?"
 
 ## How It Works
 
