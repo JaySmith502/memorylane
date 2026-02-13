@@ -34,6 +34,7 @@ asarUnpack:
 afterSign: build/notarize.js
 
 mac:
+  notarize: false
   category: public.app-category.productivity
   identity: 'Filip Kubis (ZN3J54N7AP)'
   hardenedRuntime: true

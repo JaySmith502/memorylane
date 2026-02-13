@@ -6,8 +6,8 @@ exports.default = async function notarizing(context) {
   const { electronPlatformName, appOutDir } = context
   if (electronPlatformName !== 'darwin') return
 
-  if (!process.env.APPLE_ID || !process.env.APPLE_APP_PASSWORD) {
-    console.log('Skipping notarization: APPLE_ID or APPLE_APP_PASSWORD not set.')
+  if (!process.env.APPLE_ID || !process.env.APPLE_APP_SPECIFIC_PASSWORD) {
+    console.log('Skipping notarization: APPLE_ID or APPLE_APP_SPECIFIC_PASSWORD not set.')
     return
   }
 
@@ -19,7 +19,7 @@ exports.default = async function notarizing(context) {
     appBundleId: 'com.memorylane.app',
     appPath: `${appOutDir}/${appName}.app`,
     appleId: process.env.APPLE_ID,
-    appleIdPassword: process.env.APPLE_APP_PASSWORD,
+    appleIdPassword: process.env.APPLE_APP_SPECIFIC_PASSWORD,
     teamId: 'ZN3J54N7AP',
   })
 
