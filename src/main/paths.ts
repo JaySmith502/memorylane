@@ -39,8 +39,11 @@ function isDev(): boolean {
       const { app } = require('electron')
       if (app) return !app.isPackaged
     } catch {
-      // Fall through to env check
+      // require('electron') can fail under ELECTRON_RUN_AS_NODE
     }
+    // Electron binary but no app API (ELECTRON_RUN_AS_NODE mode) —
+    // default to production unless NODE_ENV explicitly says otherwise.
+    return process.env.NODE_ENV === 'development'
   }
   return process.env.NODE_ENV !== 'production'
 }

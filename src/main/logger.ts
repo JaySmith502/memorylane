@@ -1,18 +1,25 @@
-import log from 'electron-log/main'
+interface Logger {
+  info(...args: unknown[]): void
+  warn(...args: unknown[]): void
+  error(...args: unknown[]): void
+}
 
-log.transports.file.level = 'info'
-log.transports.console.level = 'info'
-log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}] [{level}] {text}'
+let log: Logger
 
-/**
- * Configure logger for MCP mode.
- * MCP protocol uses stdout exclusively for JSON-RPC messages,
- * so we redirect console output to stderr.
- */
-export function configureMCPMode(): void {
-  log.transports.console.writeFn = ({ message }) => {
-    process.stderr.write(message + '\n')
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const electronLog = require('electron-log/main')
+  electronLog.transports.file.level = 'info'
+  electronLog.transports.console.level = 'info'
+  electronLog.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}] [{level}] {text}'
+  log = electronLog
+} catch {
+  // Fallback for ELECTRON_RUN_AS_NODE mode where electron-log can't load.
+  // All output goes to stderr (stdout is reserved for MCP protocol).
+  const write = (...args: unknown[]): void => {
+    process.stderr.write(args.map(String).join(' ') + '\n')
   }
+  log = { info: write, warn: write, error: write }
 }
 
 export default log

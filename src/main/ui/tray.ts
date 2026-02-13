@@ -186,13 +186,10 @@ export const updateTrayMenu = async (): Promise<void> => {
 export const setupTray = (dependencies: TrayDependencies): void => {
   deps = dependencies
 
-  // Try to load custom icon, fall back to default
-  // In dev: __dirname is out/main, assets is at ../../assets
-  // In production: assets are in resources/assets
   const isDev = !app.isPackaged
   const iconPath = isDev
-    ? path.join(__dirname, '../../assets/tray-icon.png')
-    : path.join(process.resourcesPath, 'assets/tray-icon.png')
+    ? path.join(app.getAppPath(), 'assets', 'tray-icon.png')
+    : path.join(process.resourcesPath, 'assets', 'tray-icon.png')
   let icon: Electron.NativeImage
 
   try {

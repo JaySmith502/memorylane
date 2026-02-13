@@ -83,14 +83,17 @@ function isRegistered(config: ClaudeDesktopConfig): boolean {
 }
 
 /**
- * Build the MCP server entry pointing to the current app executable.
+ * Build the MCP server entry.
+ *
+ * Runs the bundled mcp-entry.js under ELECTRON_RUN_AS_NODE=1 so macOS doesn't
+ * see it as a second app instance — this allows the MCP server and tray app to coexist.
  */
 function buildMCPEntry(): MCPServerEntry {
   return {
     command: app.getPath('exe'),
-    args: ['--mcp'],
+    args: [path.join(app.getAppPath(), 'out', 'main', 'mcp-entry.js')],
     env: {
-      ELECTRON_RUN_AS_NODE: '',
+      ELECTRON_RUN_AS_NODE: '1',
     },
   }
 }
@@ -110,18 +113,7 @@ export async function registerWithClaudeDesktop(): Promise<void> {
   try {
     const config = readClaudeConfig(configPath)
 
-    if (isRegistered(config)) {
-      log.info('[Claude Integration] Already registered')
-      await dialog.showMessageBox({
-        type: 'info',
-        title: 'Already Configured',
-        message: 'MemoryLane is already registered in Claude Desktop',
-        detail:
-          'The MCP server entry is already present in your Claude Desktop configuration. ' +
-          'Restart Claude Desktop if it is not showing up.',
-      })
-      return
-    }
+    const alreadyRegistered = isRegistered(config)
 
     if (config.mcpServers === undefined) {
       config.mcpServers = {}
@@ -130,13 +122,13 @@ export async function registerWithClaudeDesktop(): Promise<void> {
 
     writeClaudeConfig(configPath, config)
 
-    log.info('[Claude Integration] Registered successfully')
+    log.info(`[Claude Integration] ${alreadyRegistered ? 'Updated' : 'Registered'} successfully`)
     await dialog.showMessageBox({
       type: 'info',
-      title: 'Added to Claude Desktop',
-      message: 'MemoryLane has been added to Claude Desktop',
+      title: alreadyRegistered ? 'Updated in Claude Desktop' : 'Added to Claude Desktop',
+      message: `MemoryLane has been ${alreadyRegistered ? 'updated in' : 'added to'} Claude Desktop`,
       detail:
-        'The MCP server was registered successfully. ' +
+        `The MCP server was ${alreadyRegistered ? 'updated' : 'registered'} successfully. ` +
         'Please restart Claude Desktop for the changes to take effect.',
     })
   } catch (error) {

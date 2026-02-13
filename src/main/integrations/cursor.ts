@@ -66,14 +66,17 @@ function isRegistered(config: CursorMCPConfig): boolean {
 }
 
 /**
- * Build the MCP server entry pointing to the current app executable.
+ * Build the MCP server entry.
+ *
+ * Runs the bundled mcp-entry.js under ELECTRON_RUN_AS_NODE=1 so macOS doesn't
+ * see it as a second app instance — this allows the MCP server and tray app to coexist.
  */
 function buildMCPEntry(): MCPServerEntry {
   return {
     command: app.getPath('exe'),
-    args: ['--mcp'],
+    args: [path.join(app.getAppPath(), 'out', 'main', 'mcp-entry.js')],
     env: {
-      ELECTRON_RUN_AS_NODE: '',
+      ELECTRON_RUN_AS_NODE: '1',
     },
   }
 }
@@ -93,18 +96,7 @@ export async function registerWithCursor(): Promise<void> {
   try {
     const config = readCursorConfig(configPath)
 
-    if (isRegistered(config)) {
-      log.info('[Cursor Integration] Already registered')
-      await dialog.showMessageBox({
-        type: 'info',
-        title: 'Already Configured',
-        message: 'MemoryLane is already registered in Cursor',
-        detail:
-          'The MCP server entry is already present in your Cursor configuration. ' +
-          'Restart Cursor if it is not showing up.',
-      })
-      return
-    }
+    const alreadyRegistered = isRegistered(config)
 
     if (config.mcpServers === undefined) {
       config.mcpServers = {}
@@ -113,13 +105,13 @@ export async function registerWithCursor(): Promise<void> {
 
     writeCursorConfig(configPath, config)
 
-    log.info('[Cursor Integration] Registered successfully')
+    log.info(`[Cursor Integration] ${alreadyRegistered ? 'Updated' : 'Registered'} successfully`)
     await dialog.showMessageBox({
       type: 'info',
-      title: 'Added to Cursor',
-      message: 'MemoryLane has been added to Cursor',
+      title: alreadyRegistered ? 'Updated in Cursor' : 'Added to Cursor',
+      message: `MemoryLane has been ${alreadyRegistered ? 'updated in' : 'added to'} Cursor`,
       detail:
-        'The MCP server was registered successfully. ' +
+        `The MCP server was ${alreadyRegistered ? 'updated' : 'registered'} successfully. ` +
         'Please restart Cursor for the changes to take effect.',
     })
   } catch (error) {

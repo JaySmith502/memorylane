@@ -67,14 +67,19 @@ function isRegistered(settings: ClaudeCodeSettings): boolean {
 }
 
 /**
- * Build the MCP server entry pointing to the current app executable.
+ * Build the MCP server entry.
+ *
+ * Runs the bundled mcp-entry.js under ELECTRON_RUN_AS_NODE=1 so macOS doesn't
+ * see it as a second app instance — this allows the MCP server and tray app to coexist.
  */
 function buildMCPEntry(): MCPServerEntry {
   return {
     type: 'stdio',
     command: app.getPath('exe'),
-    args: ['--mcp'],
-    env: {},
+    args: [path.join(app.getAppPath(), 'out', 'main', 'mcp-entry.js')],
+    env: {
+      ELECTRON_RUN_AS_NODE: '1',
+    },
   }
 }
 
@@ -93,18 +98,7 @@ export async function registerWithClaudeCode(): Promise<void> {
   try {
     const settings = readSettings(settingsPath)
 
-    if (isRegistered(settings)) {
-      log.info('[Claude Code Integration] Already registered')
-      await dialog.showMessageBox({
-        type: 'info',
-        title: 'Already Configured',
-        message: 'MemoryLane is already registered in Claude Code',
-        detail:
-          'The MCP server entry is already present in your Claude Code settings. ' +
-          'Restart Claude Code if it is not showing up.',
-      })
-      return
-    }
+    const alreadyRegistered = isRegistered(settings)
 
     if (settings.mcpServers === undefined) {
       settings.mcpServers = {}
@@ -113,14 +107,18 @@ export async function registerWithClaudeCode(): Promise<void> {
 
     writeSettings(settingsPath, settings)
 
-    log.info('[Claude Code Integration] Registered successfully')
+    log.info(
+      `[Claude Code Integration] ${alreadyRegistered ? 'Updated' : 'Registered'} successfully`,
+    )
     await dialog.showMessageBox({
       type: 'info',
-      title: 'Added to Claude Code',
-      message: 'MemoryLane has been added to Claude Code',
-      detail:
-        'The MCP server was registered in your global settings. ' +
-        'It will be available in all Claude Code sessions.',
+      title: alreadyRegistered ? 'Updated in Claude Code' : 'Added to Claude Code',
+      message: `MemoryLane has been ${alreadyRegistered ? 'updated in' : 'added to'} Claude Code`,
+      detail: alreadyRegistered
+        ? 'The MCP server configuration was updated. ' +
+          'Please restart Claude Code for the changes to take effect.'
+        : 'The MCP server was registered in your global settings. ' +
+          'It will be available in all Claude Code sessions.',
     })
   } catch (error) {
     log.error('[Claude Code Integration] Registration failed:', error)

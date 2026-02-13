@@ -1,7 +1,6 @@
 import { spawn } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
-import { app } from 'electron'
 
 /**
  * Resolves the path to the Swift OCR script.
@@ -9,7 +8,15 @@ import { app } from 'electron'
  * In production, it looks in the resources directory.
  */
 function getOcrScriptPath(): string {
-  if (app.isPackaged) {
+  let isPackaged = false
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    isPackaged = require('electron').app.isPackaged
+  } catch {
+    // Running under ELECTRON_RUN_AS_NODE — treat as dev
+  }
+
+  if (isPackaged) {
     const prodPath = path.join(process.resourcesPath, 'swift', 'ocr.swift')
     if (fs.existsSync(prodPath)) {
       return prodPath

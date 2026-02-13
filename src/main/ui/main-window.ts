@@ -5,7 +5,7 @@
  * Singleton window that hides on close instead of destroying.
  */
 
-import { BrowserWindow, ipcMain, IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, ipcMain, IpcMainInvokeEvent } from 'electron'
 import path from 'node:path'
 import log from '../logger'
 import { updateTrayMenu } from './tray'
@@ -66,6 +66,8 @@ export function openMainWindow(): void {
     return
   }
 
+  const appRoot = app.getAppPath()
+
   mainWindow = new BrowserWindow({
     width: 600,
     height: 520,
@@ -74,7 +76,7 @@ export function openMainWindow(): void {
     maximizable: false,
     title: 'MemoryLane',
     webPreferences: {
-      preload: path.join(__dirname, '../preload/index.js'),
+      preload: path.join(appRoot, 'out', 'preload', 'index.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -83,7 +85,7 @@ export function openMainWindow(): void {
   if (process.env.NODE_ENV === 'development') {
     mainWindow.loadURL('http://localhost:5173/main-window.html')
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../renderer/main-window.html'))
+    mainWindow.loadFile(path.join(appRoot, 'out', 'renderer', 'main-window.html'))
   }
 
   mainWindow.on('close', (e) => {

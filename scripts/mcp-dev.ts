@@ -25,8 +25,8 @@ const PROJECT_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname
 
 const PROD_CONFIG = {
   command: '/Applications/MemoryLane.app/Contents/MacOS/MemoryLane',
-  args: ['--mcp'],
-  env: { ELECTRON_RUN_AS_NODE: '' },
+  args: ['/Applications/MemoryLane.app/Contents/Resources/app.asar/out/main/mcp-entry.js'],
+  env: { ELECTRON_RUN_AS_NODE: '1' },
 }
 
 const ELECTRON_BINARY = path.join(
