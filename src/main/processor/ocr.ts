@@ -2,12 +2,17 @@ import { spawn } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
 
+interface OcrExecutable {
+  readonly command: string
+  readonly args: readonly string[]
+}
+
 /**
- * Resolves the path to the Swift OCR script.
- * In development, it looks in the src directory.
- * In production, it looks in the resources directory.
+ * Resolves the OCR executable.
+ * In production, uses the pre-compiled binary shipped in the app resources.
+ * In development, interprets the Swift script via the `swift` command.
  */
-function getOcrScriptPath(): string {
+function getOcrExecutable(): OcrExecutable {
   let isPackaged = false
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -17,53 +22,52 @@ function getOcrScriptPath(): string {
   }
 
   if (isPackaged) {
-    const prodPath = path.join(process.resourcesPath, 'swift', 'ocr.swift')
-    if (fs.existsSync(prodPath)) {
-      return prodPath
+    const binaryPath = path.join(process.resourcesPath, 'swift', 'ocr')
+    if (fs.existsSync(binaryPath)) {
+      return { command: binaryPath, args: [] }
     }
-    throw new Error(`OCR script not found at ${prodPath}`)
+    throw new Error(`OCR binary not found at ${binaryPath}`)
   }
 
-  const devPath = path.resolve(process.cwd(), 'src', 'main', 'processor', 'swift', 'ocr.swift')
-  if (fs.existsSync(devPath)) {
-    return devPath
+  const scriptPath = path.resolve(process.cwd(), 'src', 'main', 'processor', 'swift', 'ocr.swift')
+  if (fs.existsSync(scriptPath)) {
+    return { command: 'swift', args: [scriptPath] }
   }
 
-  throw new Error(`OCR script not found at ${devPath}`)
+  throw new Error(`OCR script not found at ${scriptPath}`)
 }
 
 /**
- * Extracts text from an image using the native macOS Vision framework via a Swift sidecar script.
+ * Extracts text from an image using the native macOS Vision framework.
+ * In production, runs a pre-compiled Swift binary. In development, interprets the Swift script.
  *
  * @param filepath Absolute path to the image file
  * @returns Promise resolving to the extracted text
  * @throws Error if the file doesn't exist or the OCR process fails
  */
 export async function extractText(filepath: string): Promise<string> {
-  const scriptPath = getOcrScriptPath()
+  const { command, args } = getOcrExecutable()
 
   return new Promise((resolve, reject) => {
-    // Basic validation
     if (!fs.existsSync(filepath)) {
       return reject(new Error(`Image file not found: ${filepath}`))
     }
 
-    const swift = spawn('swift', [scriptPath, filepath])
+    const proc = spawn(command, [...args, filepath])
 
     let stdoutData = ''
     let stderrData = ''
 
-    swift.stdout.on('data', (data) => {
+    proc.stdout.on('data', (data) => {
       stdoutData += data.toString()
     })
 
-    swift.stderr.on('data', (data) => {
+    proc.stderr.on('data', (data) => {
       stderrData += data.toString()
     })
 
-    swift.on('close', (code) => {
+    proc.on('close', (code) => {
       if (code !== 0) {
-        // The Swift script exits with 1 on known errors (missing file, Vision error)
         return reject(
           new Error(
             `OCR process failed with code ${code}: ${stderrData.trim() || 'Unknown error'}`,
@@ -71,13 +75,11 @@ export async function extractText(filepath: string): Promise<string> {
         )
       }
 
-      // Success: return the trimmed text
-      // Note: "No text found" results in empty string (exit code 0), which is valid.
       resolve(stdoutData.trim())
     })
 
-    swift.on('error', (err) => {
-      reject(new Error(`Failed to spawn swift process: ${err.message}`))
+    proc.on('error', (err) => {
+      reject(new Error(`Failed to spawn OCR process: ${err.message}`))
     })
   })
 }
