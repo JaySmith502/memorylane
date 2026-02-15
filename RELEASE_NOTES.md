@@ -1,10 +1,10 @@
-# MemoryLane v0.6.1
+# MemoryLane v0.6.2
 
 MemoryLane is a macOS system tray app that captures your screen activity, processes it with OCR and AI summarization, and makes it searchable through an MCP server — giving AI assistants like Claude and Cursor memory of what you've been working on.
 
 ## What's Changed
 
-- **Pre-compiled Swift OCR binary** — the OCR sidecar is now compiled during the build step and shipped as a native binary, instead of being interpreted via `swift` at runtime. This fixes OCR failures on machines without the Swift toolchain and improves OCR startup performance.
+- **Hidden dock icon** — the app no longer appears in the macOS dock, providing a cleaner tray-only experience
 
 ## Features
 
@@ -45,4 +45,4 @@ After launching:
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/commits/v0.6.1
+https://github.com/deusXmachina-dev/memorylane/commits/v0.6.2
