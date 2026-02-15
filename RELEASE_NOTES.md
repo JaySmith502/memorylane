@@ -1,15 +1,10 @@
-# MemoryLane v0.6.0
+# MemoryLane v0.6.1
 
 MemoryLane is a macOS system tray app that captures your screen activity, processes it with OCR and AI summarization, and makes it searchable through an MCP server — giving AI assistants like Claude and Cursor memory of what you've been working on.
 
 ## What's Changed
 
-- **MCP server no longer blocks app startup** — the MCP server now runs as a separate Node process instead of inside the Electron main process, so the app launches instantly regardless of how many MCP clients are connected
-- **Snapshot timing fix** — pending events are now captured at screenshot time rather than processing time, improving the accuracy of activity timestamps
-- **Debug mode for LLM pipeline** — added a debug mode that lets you inspect how each screenshot flows through the LLM summarization pipeline
-- **Database exploration notebook** — added a Jupyter notebook (`tools/explore-db.ipynb`) for ad-hoc exploration of the local SQLite database
-- **Stable release artifact names** — release assets now use versionless filenames so download URLs always resolve to the latest version
-- **Claude Code CI workflow** — added a GitHub Actions workflow for Claude Code review
+- **Pre-compiled Swift OCR binary** — the OCR sidecar is now compiled during the build step and shipped as a native binary, instead of being interpreted via `swift` at runtime. This fixes OCR failures on machines without the Swift toolchain and improves OCR startup performance.
 
 ## Features
 
@@ -50,4 +45,4 @@ After launching:
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/commits/v0.6.0
+https://github.com/deusXmachina-dev/memorylane/commits/v0.6.1
