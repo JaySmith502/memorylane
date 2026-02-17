@@ -46,14 +46,15 @@ MemoryLane captures your screen to give AI assistants context about what you're 
 
 - **Screen Recording** — the app takes screenshots of your display. macOS will ask you to grant Screen Recording permission. This means the app can see everything on your screen while capture is running.
 - **Accessibility** — the app monitors keyboard and mouse activity (clicks, typing sessions, scrolling) to decide _when_ to capture. macOS will ask you to grant Accessibility permission. The app does not log keystrokes.
-- **What happens to screenshots** — each screenshot is sent to a cloud vision model (Mistral by default, which has a zero data retention policy) for summarization and OCR. The screenshot is then deleted.
+- **What happens to screenshots** — each screenshot is sent to your configured model endpoint for summarization and OCR (OpenRouter by default, or a custom endpoint such as local Ollama). The screenshot is then deleted.
 - **What is stored** — only short text summaries and OCR extracts are kept, in a local SQLite database on your machine. Nothing leaves your device except the screenshot sent for processing.
-- **API key** — the app needs an [OpenRouter](https://openrouter.ai/) API key for cloud vision models. You have two options:
+- **Endpoint credentials** — by default, the app uses [OpenRouter](https://openrouter.ai/) and needs API credentials. You have two built-in options:
   - **Get a managed key ($10/month)** _(recommended)_ — pay a monthly fee and we provision an OpenRouter API key for you. No OpenRouter account needed. The key is a real OpenRouter key tied to your device — MemoryLane does **not** proxy your requests. Your screenshots go directly from your machine to OpenRouter. We only handle key provisioning and billing.
   - **Bring Your Own Key** — already have an OpenRouter account? Paste your own API key instead. You pay OpenRouter directly and have full control over your account, usage limits, and billing.
-  - In both cases, the key is encrypted and stored locally using Electron's safeStorage.
+  - You can also configure a custom OpenAI-compatible endpoint (for example a local Ollama server), including its own auth header if needed.
+  - Any saved secret is encrypted and stored locally using Electron's safeStorage.
 
-> **Bottom line:** you are giving this app permission to see your screen and detect your input. All captured data is processed into text and stored locally. Regardless of which API key option you choose, screenshots are sent directly to OpenRouter for processing — MemoryLane never sees or relays your data.
+> **Bottom line:** you are giving this app permission to see your screen and detect your input. All captured data is processed into text and stored locally. Screenshots are sent directly from your machine to the configured model endpoint (OpenRouter by default, or your custom provider). MemoryLane never proxies your capture payloads.
 
 ## Current Status
 
@@ -66,6 +67,7 @@ MemoryLane captures your screen to give AI assistants context about what you're 
 - Event-driven screen capture (typing, clicking, scrolling, app switches, visual changes)
 - OCR via macOS Vision framework and native Windows OCR
 - AI-powered activity summarization (Mistral Small, GPT-5 Nano, Grok-4.1 Fast, Gemini Flash Lite via OpenRouter)
+- Custom endpoint support for OpenAI-compatible providers (including local models like Ollama)
 - Semantic + full-text search over your activity history
 - MCP server with `search_context`, `browse_timeline`, and `get_event_details` tools
 - One-click integration with Claude Desktop, Claude Code, and Cursor
@@ -76,15 +78,19 @@ MemoryLane captures your screen to give AI assistants context about what you're 
 ### Requirements
 
 - macOS (Apple Silicon / ARM64)
-- A MemoryLane API key ($10/month) **or** your own [OpenRouter](https://openrouter.ai/) API key
+- A configured model endpoint:
+  - Managed MemoryLane key ($10/month), **or**
+  - your own [OpenRouter](https://openrouter.ai/) API key, **or**
+  - a custom OpenAI-compatible endpoint (for example local Ollama)
 
 ### First launch
 
 1. Grant **Screen Recording** permission when prompted
 2. Grant **Accessibility** permission when prompted
-3. Choose how to provide an API key:
+3. Choose your default model provider:
    - **Get API Key** _(recommended)_ — click Get API Key to get a managed key ($10/month via Stripe)
    - **Bring Your Own Key** — paste your OpenRouter API key if you already have one
+4. Optional: configure a custom endpoint/model in settings if you want to use local or self-hosted models
 
 ### Start capturing
 
@@ -107,18 +113,18 @@ When using MCP tools:
 AI conversations are full of friction because LLMs have no context about you. MemoryLane fixes that by watching what you do and making it searchable.
 
 1. The app captures screenshots based on user activity triggers (not fixed intervals)
-2. A cloud vision model extracts a short summary and OCR text from each screenshot
+2. A configured vision model endpoint extracts a short summary and OCR text from each screenshot
 3. The screenshot is deleted — only the text summary is stored locally in SQLite
 4. Vector embeddings enable semantic search over your history
 5. An MCP server exposes your history to AI assistants on demand
 
-### Why cloud AI models?
+### Why cloud by default?
 
 **Performance** — local models are ~4 GB and turn laptops into space heaters. We believe most users prefer speed and normal battery life from an invisible background app.
 
 **Quality** — cloud models perform significantly better for summarization and OCR. Local models make a nice demo but fall short when users expect reliable output.
 
-That said, we'd love to see someone prove us wrong — it's one reason we open-sourced this.
+If you prefer local or self-hosted inference, you can now configure custom OpenAI-compatible endpoints (for example Ollama). Cloud remains the default path for most users because it is faster and typically more accurate.
 
 ## Build from Source
 

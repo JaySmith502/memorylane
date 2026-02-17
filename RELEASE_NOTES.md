@@ -1,20 +1,20 @@
-# MemoryLane v0.7.0
+# MemoryLane v0.8.0
 
 MemoryLane is a macOS system tray app that captures your screen activity, processes it with OCR and AI summarization, and makes it searchable through an MCP server — giving AI assistants like Claude and Cursor memory of what you've been working on.
 
 ## What's Changed
 
-- **Richer activity summaries** — semantic classification now produces more detailed, useful summaries of what you were doing on screen
-- **Summary-first MCP guidance** — tool prompts now prioritize activity summaries for "what was I doing?" questions and reserve OCR for exact recall
-- **Event-based app change monitoring** — capture timing now reacts more precisely to active app transitions
-- **Power usage improvements** — background monitoring was tuned to reduce unnecessary wakeups and improve efficiency
-- **Windows preview improvements** — native Windows OCR support and additional platform groundwork landed in this release
+- **Custom endpoint model support (local models included)** — configure an OpenAI-compatible endpoint in the app and run summarization through your own hosted or local models (for example Ollama-served open weights)
+- **End-to-end custom endpoint integration** — new shared types, persistent endpoint settings, preload/main-process IPC wiring, and runtime model client selection in semantic classification
+- **Custom endpoint UI in the main window** — new settings section for endpoint/model configuration, including a collapsible layout for easier day-to-day use
+- **Improved app context detection** — recorder now monitors title changes to improve activity transitions and timeline quality
 
 ## Features
 
 - **One-command install** — `curl | sh` installer that downloads, installs, and removes quarantine automatically
 - **Apple notarized** — the app is code-signed and Apple-notarized, no Gatekeeper warnings
 - **Managed API key via Stripe** — subscribe and start capturing in seconds, no OpenRouter account needed
+- **Custom endpoint models** — use OpenAI-compatible endpoints, including local runtimes like Ollama
 - **Multi-screen capture** — captures screenshots from all connected displays simultaneously
 - **Event-driven screen capture** — captures screenshots based on user interactions (clicks, typing, scrolling, app switches) and visual changes (perceptual dHash comparison), not fixed intervals
 - **OCR via macOS Vision** — extracts text from screenshots using the native Vision framework (Swift sidecar)
@@ -49,8 +49,9 @@ After launching:
 3. Choose how to provide an API key:
    - **Subscribe** _(recommended)_ — click Subscribe to get a managed key ($10/mo via Stripe)
    - **Bring Your Own Key** — paste your OpenRouter API key if you already have one
-4. Optionally register the MCP server with Claude Desktop or Cursor
+4. Optional: configure a custom model endpoint in settings (for example, a local Ollama endpoint)
+5. Optionally register the MCP server with Claude Desktop or Cursor
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v0.6.2...v0.7.0
+https://github.com/deusXmachina-dev/memorylane/compare/v0.7.0...v0.8.0
