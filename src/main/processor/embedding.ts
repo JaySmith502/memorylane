@@ -1,14 +1,34 @@
+import * as path from 'path'
+import * as os from 'os'
 import { pipeline, env } from '@huggingface/transformers'
 import log from '../logger'
 
-// Configure environment to not use local file system for models if possible,
-// or set a valid cache directory. For Electron, we want to ensure we don't
-// fail due to path permissions.
 // 'all-MiniLM-L6-v2' is a good balance of speed and quality for local embeddings.
 const MODEL_NAME = 'Xenova/all-MiniLM-L6-v2'
 
-// Prevent transformers from trying to download from a browser cache location in Node env
-env.cacheDir = './.cache/transformers'
+// Use an absolute cache path under the app's data directory.
+// A relative path like './.cache' breaks when the cwd is '/' (macOS launches
+// packaged apps with cwd='/'), causing ENOENT on mkdir.
+function getModelCacheDir(): string {
+  if (process.versions.electron) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { app } = require('electron')
+      if (app) return path.join(app.getPath('userData'), 'models')
+    } catch {
+      // ELECTRON_RUN_AS_NODE or app not ready — fall through
+    }
+  }
+  if (process.platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Application Support', 'memorylane', 'models')
+  }
+  if (process.platform === 'win32') {
+    return path.join(process.env.APPDATA || os.homedir(), 'memorylane', 'models')
+  }
+  return path.join(os.homedir(), '.config', 'memorylane', 'models')
+}
+
+env.cacheDir = getModelCacheDir()
 
 export class EmbeddingService {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
