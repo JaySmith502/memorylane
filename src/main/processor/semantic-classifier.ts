@@ -259,6 +259,8 @@ export class SemanticClassifierService {
       '- Click coordinates: use them to identify WHAT was clicked by looking at that position in the screenshot. NEVER output raw coordinates.\n'
     prompt +=
       '- 40-100 words, 1-4 sentences, single paragraph, no bullet points. Low-activity sessions should use the lower end of the range.\n'
+    prompt +=
+      '- Start directly with the action or subject. NEVER start with "During this session", "In this session", "The user", or similar meta-phrases.\n'
     prompt += '\n'
 
     // Context
@@ -291,7 +293,8 @@ export class SemanticClassifierService {
 
     // Task
     prompt += '## Task\n'
-    prompt += 'Describe what the user was working on during this session.\n'
+    prompt +=
+      'Describe what was worked on. Start mid-sentence with the action (e.g. "Implemented...", "Reviewed...", "Debugged...").\n'
 
     return prompt
   }
