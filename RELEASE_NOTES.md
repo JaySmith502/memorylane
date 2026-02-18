@@ -1,14 +1,16 @@
-# MemoryLane v0.9.1
+# MemoryLane v0.10.0
 
 MemoryLane is a macOS system tray app that captures your screen activity, processes it with OCR and AI summarization, and makes it searchable through an MCP server — giving AI assistants like Claude and Cursor memory of what you've been working on.
 
 ## What's Changed
 
-- **Fixed model cache path for packaged builds** — the Transformers.js model cache now uses an absolute path under the app's data directory, fixing an ENOENT crash when macOS launches the packaged app with `cwd=/`
-- **More accurate OCR** — switched the macOS Vision recognition mode from `fast` to `accurate` for higher-quality text extraction
+- **Automatic updates** — the app now checks for new releases on launch and every 4 hours, downloads updates in the background, and shows an "Install Update Now" option in the tray menu when ready
+- **GitHub publish config** — `electron-builder.yml` now includes a GitHub publish provider, enabling `electron-updater` to detect and download new versions from GitHub Releases
+- **Simplified tray menu** — removed the per-session API usage stats submenu for a cleaner tray experience; database stats remain available
 
 ## Features
 
+- **Automatic updates** — background update checks with one-click install from the tray menu
 - **One-command install** — `curl | sh` installer that downloads, installs, and removes quarantine automatically
 - **Apple notarized** — the app is code-signed and Apple-notarized, no Gatekeeper warnings
 - **Managed API key via Stripe** — subscribe and start capturing in seconds, no OpenRouter account needed
@@ -53,4 +55,4 @@ After launching:
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v0.9.0...v0.9.1
+https://github.com/deusXmachina-dev/memorylane/compare/v0.9.1...v0.10.0

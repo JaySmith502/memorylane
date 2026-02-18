@@ -129,6 +129,8 @@ export interface MainWindowStats {
   apiUsage: { requestCount: number; totalCost: number } | null
 }
 
+export type UpdateState = 'idle' | 'downloading' | 'ready'
+
 export interface MainWindowAPI {
   getStatus: () => Promise<MainWindowStatus>
   toggleCapture: () => Promise<MainWindowStatus>
@@ -151,4 +153,8 @@ export interface MainWindowAPI {
   onSubscriptionUpdate: (callback: (update: SubscriptionUpdate) => void) => void
   // Stats
   getStats: () => Promise<MainWindowStats>
+  // Updater
+  getUpdateState: () => Promise<UpdateState>
+  onUpdateStateChanged: (callback: (state: UpdateState) => void) => void
+  installUpdate: () => Promise<void>
 }

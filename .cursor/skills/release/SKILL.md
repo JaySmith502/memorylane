@@ -111,9 +111,12 @@ Run outside the sandbox (`required_permissions: ["all"]`):
 gh release create vX.Y.Z \
   dist/MemoryLane-arm64-mac.zip \
   dist/MemoryLane-arm64-mac.dmg \
+  dist/latest-mac.yml \
   --title "vX.Y.Z" \
   --notes-file RELEASE_NOTES.md
 ```
+
+`latest-mac.yml` is required by `electron-updater` to detect new versions. It must be uploaded with every release alongside the ZIP and DMG.
 
 ## Checklist
 
@@ -128,4 +131,4 @@ Before finishing, verify:
 - [ ] `dist/MemoryLane-arm64-mac.zip` exists
 - [ ] `dist/MemoryLane-arm64-mac.dmg` exists
 - [ ] Notarization verified (`spctl --assess` reports `accepted`)
-- [ ] GitHub release is published with both ZIP and DMG attached
+- [ ] GitHub release is published with ZIP, DMG, and `latest-mac.yml` attached

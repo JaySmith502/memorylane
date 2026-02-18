@@ -122,6 +122,11 @@ app.on('ready', async () => {
     processor: processor!,
   })
 
+  const { initAutoUpdater } = await import('./updater')
+  initAutoUpdater(() => {
+    void updateTrayMenu()
+  })
+
   const { initMainWindowIPC, openMainWindow, sendStatusToRenderer } =
     await import('./ui/main-window')
   initMainWindowIPC({

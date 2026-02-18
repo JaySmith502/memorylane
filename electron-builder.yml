@@ -1,3 +1,8 @@
+publish:
+  provider: github
+  owner: deusXmachina-dev
+  repo: memorylane
+
 appId: com.memorylane.app
 productName: MemoryLane
 copyright: Copyright © 2026 Filip Kubis

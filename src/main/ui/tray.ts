@@ -12,6 +12,7 @@ import { registerWithClaudeCode } from '../integrations/claude-code'
 import type { ActivityProcessor } from '../processor/index'
 import type { ActivityManager } from '../processor/activity-manager'
 import { sendStatusToRenderer, openMainWindow } from './main-window'
+import { getUpdateState, quitAndInstall } from '../updater'
 
 interface TrayDependencies {
   recorder: {
@@ -56,35 +57,7 @@ const buildUsageStatsSubmenu = async (): Promise<Electron.MenuItemConstructorOpt
     return submenu
   }
 
-  const classifier = deps.processor.getClassifierService()
   const storage = deps.processor.getStorageService()
-
-  if (classifier) {
-    const usageTracker = classifier.getUsageTracker()
-    const stats = usageTracker.getStats()
-
-    submenu.push(
-      {
-        label: `API Requests: ${formatNumber(stats.requestCount)}`,
-        enabled: false,
-      },
-      {
-        label: `Tokens: ${formatNumber(stats.promptTokens)} (prompt) / ${formatNumber(stats.completionTokens)} (completion)`,
-        enabled: false,
-      },
-      {
-        label: `Est. Cost: $${stats.totalCost.toFixed(4)}`,
-        enabled: false,
-      },
-    )
-  } else {
-    submenu.push({
-      label: 'API tracking unavailable (no API key)',
-      enabled: false,
-    })
-  }
-
-  submenu.push({ type: 'separator' })
 
   try {
     const activityCount = await storage.countRows()
@@ -121,7 +94,16 @@ export const updateTrayMenu = async (): Promise<void> => {
 
   const usageStatsSubmenu = await buildUsageStatsSubmenu()
 
+  const updateState = getUpdateState()
   const contextMenu = Menu.buildFromTemplate([
+    ...(updateState === 'ready'
+      ? [
+          { label: 'Install Update Now (Restart)', click: () => quitAndInstall() },
+          { type: 'separator' as const },
+        ]
+      : updateState === 'downloading'
+        ? [{ label: 'Downloading Update...', enabled: false }, { type: 'separator' as const }]
+        : []),
     {
       label: isCapturing ? 'Stop Capture' : 'Start Capture',
       click: () => {

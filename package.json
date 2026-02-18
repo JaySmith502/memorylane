@@ -1,7 +1,7 @@
 {
   "name": "memorylane",
   "productName": "MemoryLane",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "description": "MemoryLane is a system tray application that captures screenshots at regular intervals.",
   "main": "./out/main/index.js",
   "private": true,
@@ -79,6 +79,7 @@
     "color-name": "^1.1.4",
     "dotenv": "^17.2.3",
     "electron-log": "^5.4.3",
+    "electron-updater": "^6.7.3",
     "lucide-react": "^0.563.0",
     "next-themes": "^0.4.6",
     "radix-ui": "^1.4.3",
