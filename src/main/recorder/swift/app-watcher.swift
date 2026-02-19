@@ -16,12 +16,6 @@ func nowMs() -> Int64 {
     return Int64(Date().timeIntervalSince1970 * 1000)
 }
 
-/// Escape a string for safe embedding inside an AppleScript string literal.
-func escapeForAppleScript(_ s: String) -> String {
-    return s.replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-}
-
 // MARK: - Accessibility helpers
 
 /// Read the focused window's AXUIElement for a given PID.
@@ -44,49 +38,72 @@ func windowTitle(forPid pid: pid_t) -> String? {
     return titleValue as? String
 }
 
-// MARK: - Browser URL extraction via AppleScript
+// MARK: - Browser URL via Accessibility API
 
-/// Bundle IDs we know how to extract URLs from.
-let chromiumBundleIds: Set<String> = [
+let browserBundleIds: Set<String> = [
     "com.google.Chrome",
     "com.google.Chrome.canary",
+    "org.chromium.Chromium",
     "com.brave.Browser",
     "com.microsoft.edgemac",
     "com.vivaldi.Vivaldi",
     "company.thebrowser.Browser",  // Arc
     "com.operasoftware.Opera",
+    "com.apple.Safari",
+    "com.apple.SafariTechnologyPreview",
 ]
 
-/// Get the active tab URL from a Chromium-based browser via AppleScript.
-func chromiumTabURL(appName: String) -> String? {
-    let escaped = escapeForAppleScript(appName)
-    let src = "tell application \"\(escaped)\" to get URL of active tab of front window"
-    var error: NSDictionary?
-    guard let script = NSAppleScript(source: src) else { return nil }
-    let result = script.executeAndReturnError(&error)
-    if error != nil { return nil }
-    return result.stringValue
-}
-
-/// Get the active tab URL from Safari.
-func safariTabURL() -> String? {
-    let src = "tell application \"Safari\" to get URL of front document"
-    var error: NSDictionary?
-    guard let script = NSAppleScript(source: src) else { return nil }
-    let result = script.executeAndReturnError(&error)
-    if error != nil { return nil }
-    return result.stringValue
-}
-
-/// Attempt to extract a URL for the given app. Returns nil if not a known browser or on failure.
-func browserURL(bundleId: String, appName: String) -> String? {
-    if chromiumBundleIds.contains(bundleId) {
-        return chromiumTabURL(appName: appName)
+/// Try the AXDocument attribute on the window — supported by Safari and Chrome-family.
+func axDocumentURL(window: AXUIElement) -> String? {
+    var value: AnyObject?
+    guard AXUIElementCopyAttributeValue(window, "AXDocument" as CFString, &value) == .success else {
+        return nil
     }
-    if bundleId == "com.apple.Safari" || bundleId == "com.apple.SafariTechnologyPreview" {
-        return safariTabURL()
+    guard let url = value as? String, !url.isEmpty, url != "about:blank" else { return nil }
+    return url
+}
+
+/// BFS through the AX tree to find an address-bar text field by its identifier.
+/// Depth-limited to avoid hanging on deeply nested UIs.
+func findAddressBarValue(in element: AXUIElement, depth: Int = 0) -> String? {
+    guard depth < 6 else { return nil }
+
+    var role: AnyObject?
+    var identifier: AnyObject?
+    AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role)
+    AXUIElementCopyAttributeValue(element, kAXIdentifierAttribute as CFString, &identifier)
+
+    if let r = role as? String, r == kAXTextFieldRole as String,
+       let id = identifier as? String,
+       id.lowercased().contains("address") || id.lowercased().contains("url") || id.lowercased().contains("location") {
+        var value: AnyObject?
+        if AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &value) == .success,
+           let urlStr = value as? String, !urlStr.isEmpty {
+            return urlStr
+        }
+    }
+
+    var children: AnyObject?
+    guard AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &children) == .success,
+          let childArray = children as? [AXUIElement] else { return nil }
+
+    for child in childArray {
+        if let url = findAddressBarValue(in: child, depth: depth + 1) { return url }
     }
     return nil
+}
+
+/// Extract the current URL from a browser window using the Accessibility API only.
+/// No AppleScript — relies solely on the Accessibility permission already required by this process.
+func browserURL(pid: pid_t, bundleId: String) -> String? {
+    guard browserBundleIds.contains(bundleId) else { return nil }
+    guard let window = focusedWindow(forPid: pid) else { return nil }
+
+    // AXDocument is the fast path — one attribute read, works for Safari and Chrome-family.
+    if let url = axDocumentURL(window: window) { return url }
+
+    // Fall back to searching the AX tree for the address bar text field.
+    return findAddressBarValue(in: window)
 }
 
 // MARK: - Build event payload
@@ -106,8 +123,7 @@ func buildEvent(type: String, app: NSRunningApplication, title: String) -> [Stri
         "title": title,
     ]
 
-    // Try to get browser URL
-    if let url = browserURL(bundleId: bundleId, appName: appName) {
+    if let url = browserURL(pid: pid, bundleId: bundleId) {
         dict["url"] = url
     }
 
