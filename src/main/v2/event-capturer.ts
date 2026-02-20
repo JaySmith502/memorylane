@@ -2,10 +2,13 @@ import { v4 as uuidv4 } from 'uuid'
 import { EVENT_CAPTURER_CONFIG } from '@constants'
 import { EventWindow, InteractionContext } from '../../shared/types'
 import log from '../logger'
-
-export type OnEventWindowCallback = (window: EventWindow) => void
+import type { DurableStream } from './streams/stream'
 
 export class EventCapturer {
+  private readonly eventStream: DurableStream<EventWindow>
+
+  private appendChain: Promise<void> = Promise.resolve()
+
   /**
    * The in-progress window accumulating events. `null` when idle (no events
    * since the last window closed). Created lazily on the first handleEvent()
@@ -31,24 +34,8 @@ export class EventCapturer {
    */
   private maxDurationTimer: NodeJS.Timeout | null = null
 
-  /**
-   * Registered subscribers. Notified (in order) each time a window closes.
-   * Errors in individual callbacks are caught and logged — one failing
-   * callback does not prevent the others from running.
-   */
-  private callbacks: OnEventWindowCallback[] = []
-
-  /** Register a callback to receive completed EventWindows. */
-  onEventWindow(callback: OnEventWindowCallback): void {
-    this.callbacks.push(callback)
-  }
-
-  /** Remove a previously registered callback. */
-  clearEventWindowCallback(callback: OnEventWindowCallback): void {
-    const idx = this.callbacks.indexOf(callback)
-    if (idx !== -1) {
-      this.callbacks.splice(idx, 1)
-    }
+  constructor(eventStream: DurableStream<EventWindow>) {
+    this.eventStream = eventStream
   }
 
   /**
@@ -108,7 +95,7 @@ export class EventCapturer {
 
   /**
    * Close the current window with the given reason, build the EventWindow,
-   * notify callbacks, and reset state for the next window.
+   * enqueue it for async stream append, and reset state for the next window.
    */
   private closeWindow(reason: EventWindow['closedBy']): void {
     if (this.currentWindow === null) return
@@ -138,14 +125,7 @@ export class EventCapturer {
       `[EventCapturer] Window closed (${reason}): ${window.events.length} events, ` +
         `${window.endTimestamp - window.startTimestamp}ms`,
     )
-
-    for (const cb of this.callbacks) {
-      try {
-        cb(window)
-      } catch (err) {
-        log.error('[EventCapturer] Callback error:', err)
-      }
-    }
+    this.enqueueWindow(window)
   }
 
   private resetGapTimer(): void {
@@ -163,5 +143,15 @@ export class EventCapturer {
       this.maxDurationTimer = null
       this.closeWindow('max_duration')
     }, EVENT_CAPTURER_CONFIG.MAX_WINDOW_DURATION_MS)
+  }
+
+  private enqueueWindow(window: EventWindow): void {
+    const appendTask = this.appendChain.then(() => this.eventStream.append(window))
+
+    this.appendChain = appendTask
+      .then(() => undefined)
+      .catch((err) => {
+        log.error('[EventCapturer] Stream append failed:', err)
+      })
   }
 }

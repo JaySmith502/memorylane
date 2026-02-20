@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InteractionContext, EventWindow } from '../../shared/types'
+import { InMemoryStream } from './streams/in-memory-stream'
+import type { StreamSubscription } from './streams/stream'
 
 // Use short timer values for fast tests
 vi.mock('@constants', () => ({
@@ -19,7 +21,7 @@ vi.mock('../logger', () => ({
   },
 }))
 
-import { EventCapturer, OnEventWindowCallback } from './event-capturer'
+import { EventCapturer } from './event-capturer'
 
 function makeEvent(
   overrides: Partial<InteractionContext> & { type: InteractionContext['type'] },
@@ -30,23 +32,35 @@ function makeEvent(
   }
 }
 
+async function flushAsyncAppends(): Promise<void> {
+  await Promise.resolve()
+  await Promise.resolve()
+}
+
 describe('EventCapturer', () => {
   let capturer: EventCapturer
+  let stream: InMemoryStream<EventWindow>
+  let windows: EventWindow[]
+  let windowsSubscription: StreamSubscription
 
   beforeEach(() => {
     vi.useFakeTimers()
-    capturer = new EventCapturer()
+    stream = new InMemoryStream<EventWindow>()
+    windows = []
+    capturer = new EventCapturer(stream)
+    windowsSubscription = stream.subscribe({
+      startAt: { type: 'now' },
+      onRecord: (record) => windows.push(record.payload),
+    })
   })
 
   afterEach(() => {
+    windowsSubscription.unsubscribe()
     capturer.destroy()
     vi.useRealTimers()
   })
 
-  it('emits a window via gap closure after inactivity', () => {
-    const windows: EventWindow[] = []
-    capturer.onEventWindow((w) => windows.push(w))
-
+  it('emits a window via gap closure after inactivity', async () => {
     capturer.handleEvent(makeEvent({ type: 'keyboard', timestamp: 1000 }))
     capturer.handleEvent(makeEvent({ type: 'keyboard', timestamp: 1050 }))
 
@@ -54,6 +68,7 @@ describe('EventCapturer', () => {
 
     // Advance past gap timeout (100ms mock)
     vi.advanceTimersByTime(100)
+    await flushAsyncAppends()
 
     expect(windows).toHaveLength(1)
     expect(windows[0].closedBy).toBe('gap')
@@ -62,16 +77,14 @@ describe('EventCapturer', () => {
     expect(windows[0].endTimestamp).toBe(1050)
   })
 
-  it('force-closes with max_duration when window exceeds max duration', () => {
-    const windows: EventWindow[] = []
-    capturer.onEventWindow((w) => windows.push(w))
-
+  it('force-closes with max_duration when window exceeds max duration', async () => {
     // Feed events continuously to keep the gap timer resetting
     capturer.handleEvent(makeEvent({ type: 'keyboard', timestamp: 1000 }))
     for (let i = 1; i <= 10; i++) {
       vi.advanceTimersByTime(80) // less than gap timeout (100ms)
       capturer.handleEvent(makeEvent({ type: 'keyboard', timestamp: 1000 + i * 80 }))
     }
+    await flushAsyncAppends()
 
     // At this point ~800ms has passed. Max duration is 500ms, so the timer should
     // have fired at 500ms. The window should have been closed then.
@@ -81,100 +94,103 @@ describe('EventCapturer', () => {
     // The events after max_duration fired opened a new window
     // Advance past gap timeout to close that second window
     vi.advanceTimersByTime(100)
+    await flushAsyncAppends()
     expect(windows).toHaveLength(2)
   })
 
-  it('emits with flush when flush() is called', () => {
-    const windows: EventWindow[] = []
-    capturer.onEventWindow((w) => windows.push(w))
-
+  it('emits with flush when flush() is called', async () => {
     capturer.handleEvent(makeEvent({ type: 'click', timestamp: 2000 }))
     capturer.flush()
+    await flushAsyncAppends()
 
     expect(windows).toHaveLength(1)
     expect(windows[0].closedBy).toBe('flush')
     expect(windows[0].events).toHaveLength(1)
   })
 
-  it('flush is a no-op when no window is open', () => {
-    const windows: EventWindow[] = []
-    capturer.onEventWindow((w) => windows.push(w))
-
+  it('flush is a no-op when no window is open', async () => {
     capturer.flush()
+    await flushAsyncAppends()
 
     expect(windows).toHaveLength(0)
   })
 
-  it('destroy discards open window without emitting', () => {
-    const windows: EventWindow[] = []
-    capturer.onEventWindow((w) => windows.push(w))
-
+  it('destroy discards open window without emitting', async () => {
     capturer.handleEvent(makeEvent({ type: 'keyboard', timestamp: 3000 }))
     capturer.destroy()
 
     // Advance timers to ensure no delayed callbacks fire
     vi.advanceTimersByTime(1000)
+    await flushAsyncAppends()
 
     expect(windows).toHaveLength(0)
   })
 
-  it('does not open a window until the first event', () => {
-    const windows: EventWindow[] = []
-    capturer.onEventWindow((w) => windows.push(w))
-
-    // No events → flush is no-op
+  it('does not open a window until the first event', async () => {
+    // No events -> flush is no-op
     capturer.flush()
+    await flushAsyncAppends()
     expect(windows).toHaveLength(0)
 
     // Advance timers — still nothing
     vi.advanceTimersByTime(1000)
+    await flushAsyncAppends()
     expect(windows).toHaveLength(0)
   })
 
-  it('supports registering and removing callbacks', () => {
+  it('supports stream subscriptions and unsubscribe', async () => {
     const windowsA: EventWindow[] = []
     const windowsB: EventWindow[] = []
-    const cbA: OnEventWindowCallback = (w) => windowsA.push(w)
-    const cbB: OnEventWindowCallback = (w) => windowsB.push(w)
-
-    capturer.onEventWindow(cbA)
-    capturer.onEventWindow(cbB)
+    const subA = stream.subscribe({
+      startAt: { type: 'now' },
+      onRecord: (record) => windowsA.push(record.payload),
+    })
+    const subB = stream.subscribe({
+      startAt: { type: 'now' },
+      onRecord: (record) => windowsB.push(record.payload),
+    })
 
     capturer.handleEvent(makeEvent({ type: 'click', timestamp: 4000 }))
     capturer.flush()
+    await flushAsyncAppends()
 
     expect(windowsA).toHaveLength(1)
     expect(windowsB).toHaveLength(1)
 
-    // Remove cbA
-    capturer.clearEventWindowCallback(cbA)
+    subA.unsubscribe()
 
     capturer.handleEvent(makeEvent({ type: 'click', timestamp: 5000 }))
     capturer.flush()
+    await flushAsyncAppends()
 
-    expect(windowsA).toHaveLength(1) // unchanged
+    expect(windowsA).toHaveLength(1)
     expect(windowsB).toHaveLength(2)
+    subB.unsubscribe()
   })
 
-  it('isolates callback errors — one throwing callback does not break others', () => {
-    const windows: EventWindow[] = []
-    const throwingCb: OnEventWindowCallback = () => {
-      throw new Error('boom')
-    }
-
-    capturer.onEventWindow(throwingCb)
-    capturer.onEventWindow((w) => windows.push(w))
+  it('isolates subscriber errors — one throwing subscriber does not break others', async () => {
+    const successfulWindows: EventWindow[] = []
+    const throwingSub = stream.subscribe({
+      startAt: { type: 'now' },
+      onRecord: () => {
+        throw new Error('boom')
+      },
+    })
+    const successfulSub = stream.subscribe({
+      startAt: { type: 'now' },
+      onRecord: (record) => successfulWindows.push(record.payload),
+    })
 
     capturer.handleEvent(makeEvent({ type: 'keyboard', timestamp: 6000 }))
     capturer.flush()
+    await flushAsyncAppends()
 
-    expect(windows).toHaveLength(1)
+    expect(successfulWindows).toHaveLength(1)
+    throwingSub.unsubscribe()
+    successfulSub.unsubscribe()
   })
 
-  it('preserves event insertion order in the emitted window', () => {
-    const windows: EventWindow[] = []
-    capturer.onEventWindow((w) => windows.push(w))
-
+  it('preserves event insertion order in the emitted window', async () => {
     const events = [
       makeEvent({ type: 'keyboard', timestamp: 7000 }),
       makeEvent({ type: 'click', timestamp: 7010 }),
@@ -185,6 +201,7 @@ describe('EventCapturer', () => {
       capturer.handleEvent(e)
     }
     capturer.flush()
+    await flushAsyncAppends()
 
     expect(windows[0].events).toHaveLength(3)
     expect(windows[0].events[0].type).toBe('keyboard')
@@ -192,17 +209,16 @@ describe('EventCapturer', () => {
     expect(windows[0].events[2].type).toBe('scroll')
   })
 
-  it('produces multiple consecutive windows with unique ids', () => {
-    const windows: EventWindow[] = []
-    capturer.onEventWindow((w) => windows.push(w))
-
+  it('produces multiple consecutive windows with unique ids', async () => {
     // First window
     capturer.handleEvent(makeEvent({ type: 'keyboard', timestamp: 8000 }))
     vi.advanceTimersByTime(100) // gap close
+    await flushAsyncAppends()
 
     // Second window
     capturer.handleEvent(makeEvent({ type: 'click', timestamp: 9000 }))
     vi.advanceTimersByTime(100) // gap close
+    await flushAsyncAppends()
 
     expect(windows).toHaveLength(2)
     expect(windows[0].id).not.toBe(windows[1].id)
@@ -210,10 +226,7 @@ describe('EventCapturer', () => {
     expect(windows[1].closedBy).toBe('gap')
   })
 
-  it('splits window on app_change — previous window emitted, app_change becomes first event of new window', () => {
-    const windows: EventWindow[] = []
-    capturer.onEventWindow((w) => windows.push(w))
-
+  it('splits window on app_change — previous window emitted, app_change becomes first event of new window', async () => {
     capturer.handleEvent(makeEvent({ type: 'keyboard', timestamp: 10000 }))
     capturer.handleEvent(makeEvent({ type: 'keyboard', timestamp: 10050 }))
 
@@ -226,6 +239,7 @@ describe('EventCapturer', () => {
         previousWindow: { title: 'Old App', processName: 'oldapp' },
       }),
     )
+    await flushAsyncAppends()
 
     // First window should have been emitted with the keyboard events
     expect(windows).toHaveLength(1)
@@ -237,6 +251,7 @@ describe('EventCapturer', () => {
 
     // The app_change event is in a new (still open) window — flush to verify
     capturer.flush()
+    await flushAsyncAppends()
 
     expect(windows).toHaveLength(2)
     expect(windows[1].closedBy).toBe('flush')
@@ -245,10 +260,7 @@ describe('EventCapturer', () => {
     expect(windows[1].startTimestamp).toBe(10100)
   })
 
-  it('gap timer resets on each event', () => {
-    const windows: EventWindow[] = []
-    capturer.onEventWindow((w) => windows.push(w))
-
+  it('gap timer resets on each event', async () => {
     capturer.handleEvent(makeEvent({ type: 'keyboard', timestamp: 11000 }))
 
     // Advance 80ms (less than 100ms gap) and feed another event
@@ -257,10 +269,12 @@ describe('EventCapturer', () => {
 
     // Advance another 80ms — should not close yet (gap restarted)
     vi.advanceTimersByTime(80)
+    await flushAsyncAppends()
     expect(windows).toHaveLength(0)
 
     // Advance remaining 20ms to hit 100ms after last event
     vi.advanceTimersByTime(20)
+    await flushAsyncAppends()
     expect(windows).toHaveLength(1)
     expect(windows[0].events).toHaveLength(2)
   })
