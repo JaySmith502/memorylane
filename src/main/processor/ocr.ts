@@ -1,7 +1,6 @@
 import { spawn } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
-import sharp from 'sharp'
 import { createOcrBackendError } from './ocr-errors'
 import { extractTextWindowsNative } from './ocr-windows-native'
 import { OCR_CONFIG } from '@constants'
@@ -130,33 +129,7 @@ const PLATFORM_OCR_BACKENDS: Partial<Record<NodeJS.Platform, OcrBackend>> = {
 }
 
 /**
- * Downscale an image to OCR_MAX_WIDTH if configured, writing a temp file.
- * Returns the path to use for OCR (original if no downscale needed) and
- * whether the returned path is a temp file that should be cleaned up.
- */
-async function prepareForOcr(filepath: string): Promise<{ ocrPath: string; isTemp: boolean }> {
-  const maxWidth = OCR_CONFIG.OCR_MAX_WIDTH
-  if (maxWidth <= 0) {
-    return { ocrPath: filepath, isTemp: false }
-  }
-
-  const metadata = await sharp(filepath).metadata()
-  if (!metadata.width || metadata.width <= maxWidth) {
-    return { ocrPath: filepath, isTemp: false }
-  }
-
-  const tempPath = filepath.replace(/\.png$/, '_ocr_tmp.png')
-  await sharp(filepath).resize({ width: maxWidth, withoutEnlargement: true }).png().toFile(tempPath)
-
-  log.info(
-    `[OCR] Downscaled ${path.basename(filepath)} from ${metadata.width}px to ${maxWidth}px for OCR`,
-  )
-  return { ocrPath: tempPath, isTemp: true }
-}
-
-/**
  * Extracts text from an image using a platform-specific OCR backend.
- * If OCR_MAX_WIDTH is set, the image is downscaled to a temp file first.
  *
  * @param filepath Absolute path to the image file
  * @returns Promise resolving to the extracted text
@@ -174,20 +147,9 @@ export async function extractText(filepath: string): Promise<string> {
     )
   }
 
-  const { ocrPath, isTemp } = await prepareForOcr(filepath)
   const startMs = Date.now()
-  try {
-    const text = await backend(ocrPath)
-    const elapsedMs = Date.now() - startMs
-    log.info(`[OCR] extractText completed in ${elapsedMs}ms for ${path.basename(filepath)}`)
-    return text
-  } finally {
-    if (isTemp) {
-      try {
-        fs.unlinkSync(ocrPath)
-      } catch {
-        log.warn(`[OCR] Failed to clean up temp file: ${ocrPath}`)
-      }
-    }
-  }
+  const text = await backend(filepath)
+  const elapsedMs = Date.now() - startMs
+  log.info(`[OCR] extractText completed in ${elapsedMs}ms for ${path.basename(filepath)}`)
+  return text
 }

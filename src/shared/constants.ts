@@ -53,7 +53,6 @@ export const OCR_CONFIG = {
   ENABLED: true, // Toggle OCR extraction during activity processing
   MAX_CONCURRENT_ACTIVITIES: 1, // Max activities processing through the pipeline at once
   MAX_CONCURRENT_OCR: 2, // Max parallel OCR subprocesses per activity
-  OCR_MAX_WIDTH: 1280, // Downscale images to this width before OCR (0 = no downscale)
   RECOGNITION_MODE: 'accurate' as 'fast' | 'accurate', // macOS Vision recognition level
 }
 

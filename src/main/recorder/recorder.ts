@@ -21,7 +21,7 @@ function ensureScreenshotsDir(): void {
   }
 }
 
-const FULL_RES_SIZE = { width: 1920, height: 1080 }
+const FULL_RES_SIZE = { width: 1920 * 2, height: 1080 * 2 }
 const SAMPLE_SIZE = { width: 320, height: 180 }
 
 function parseDisplayId(sourceId: string): number {
