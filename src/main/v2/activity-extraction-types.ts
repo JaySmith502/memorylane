@@ -25,6 +25,7 @@ export interface V2ActivityExtractorConfig {
   maxConcurrent: number
   maxRetries: number
   retryBackoffMs: number
+  onTaskComplete?: (activity: V2Activity, outcome: 'succeeded' | 'dead-lettered') => void
 }
 
 export interface ActivityExtractorStats {

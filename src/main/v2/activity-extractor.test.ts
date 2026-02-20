@@ -343,4 +343,75 @@ describe('ActivityExtractor', () => {
     expect(processed.filter((entry) => entry.endsWith(':second'))).toHaveLength(1)
     expect(processed.includes('B:first')).toBe(false)
   })
+
+  it('fires onTaskComplete with succeeded after successful processing', async () => {
+    const completions: Array<{ id: string; outcome: string }> = []
+    const { extractor, activityStream } = createExtractor({
+      config: {
+        onTaskComplete: (activity, outcome) => {
+          completions.push({ id: activity.id, outcome })
+        },
+      },
+    })
+
+    await extractor.start()
+    await activityStream.append(makeActivity('ok-1', 30_000))
+    await activityStream.append(makeActivity('ok-2', 31_000))
+
+    await waitFor(() => completions.length === 2, 'Expected both completions')
+    expect(completions).toEqual([
+      { id: 'ok-1', outcome: 'succeeded' },
+      { id: 'ok-2', outcome: 'succeeded' },
+    ])
+  })
+
+  it('fires onTaskComplete with dead-lettered after retry exhaustion', async () => {
+    const completions: Array<{ id: string; outcome: string }> = []
+    const { extractor, activityStream } = createExtractor({
+      config: {
+        maxRetries: 0,
+        retryBackoffMs: 0,
+        onTaskComplete: (activity, outcome) => {
+          completions.push({ id: activity.id, outcome })
+        },
+      },
+      transformer: {
+        transform: async () => {
+          throw new Error('always fails')
+        },
+      },
+    })
+
+    await extractor.start()
+    await activityStream.append(makeActivity('fail-1', 40_000))
+
+    await waitFor(() => completions.length === 1, 'Expected dead-letter completion')
+    expect(completions[0]).toEqual({ id: 'fail-1', outcome: 'dead-lettered' })
+  })
+
+  it('onTaskComplete errors do not crash the extractor', async () => {
+    const persisted: string[] = []
+    const { extractor, activityStream } = createExtractor({
+      config: {
+        onTaskComplete: () => {
+          throw new Error('callback boom')
+        },
+      },
+      sink: {
+        persist: async ({ activity }) => {
+          persisted.push(activity.id)
+        },
+      },
+    })
+
+    await extractor.start()
+    await activityStream.append(makeActivity('survive-1', 50_000))
+    await activityStream.append(makeActivity('survive-2', 51_000))
+
+    await waitFor(
+      () => persisted.length === 2,
+      'Expected both activities to persist despite callback errors',
+    )
+    expect(extractor.getStats().succeeded).toBe(2)
+  })
 })

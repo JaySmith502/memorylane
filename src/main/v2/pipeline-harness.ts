@@ -1,4 +1,5 @@
 import type { InteractionContext, EventWindow } from '../../shared/types'
+import { SCREENSHOT_CLEANUP_CONFIG } from '../../shared/constants'
 import { EventCapturer } from './event-capturer'
 import { ActivityProducer } from './activity-producer'
 import type { V2Activity, V2ActivityProducerConfig } from './activity-types'
@@ -10,6 +11,7 @@ import type {
 } from './activity-extraction-types'
 import { InMemoryStream } from './streams/in-memory-stream'
 import { ScreenCapturer, type Frame } from './recorder/screen-capturer'
+import { cleanupActivityFiles, sweepStaleFiles } from './activity-cleanup'
 
 export interface V2PipelineHarness {
   frameStream: InMemoryStream<Frame>
@@ -64,9 +66,16 @@ export function createV2PipelineHarness(params: {
           activityStream,
           transformer: params.extractorTransformer,
           sink: params.extractorSink,
-          config: params.activityExtractorConfig,
+          config: {
+            ...params.activityExtractorConfig,
+            onTaskComplete: (activity) => {
+              cleanupActivityFiles(activity, params.outputDir)
+            },
+          },
         })
       : undefined
+
+  let cleanupTimer: ReturnType<typeof setInterval> | null = null
 
   return {
     frameStream,
@@ -82,8 +91,16 @@ export function createV2PipelineHarness(params: {
         await activityExtractor.start()
       }
       screenCapturer.start()
+
+      cleanupTimer = setInterval(() => {
+        sweepStaleFiles(params.outputDir)
+      }, SCREENSHOT_CLEANUP_CONFIG.CLEANUP_INTERVAL_MS)
     },
     async stop() {
+      if (cleanupTimer) {
+        clearInterval(cleanupTimer)
+        cleanupTimer = null
+      }
       screenCapturer.stop()
       await eventCapturer.flushAndWait()
       await activityProducer.stop()

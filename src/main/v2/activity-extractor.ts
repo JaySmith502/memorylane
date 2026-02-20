@@ -144,6 +144,11 @@ export class ActivityExtractor {
       })
       this.counters.succeeded++
       await this.markCompleted(task.record.offset)
+      try {
+        this.config.onTaskComplete?.(task.record.payload, 'succeeded')
+      } catch (e) {
+        log.warn('[ActivityExtractor] onTaskComplete callback error (succeeded):', e)
+      }
       return
     } catch (err) {
       const nextAttempt = task.attempt + 1
@@ -164,6 +169,11 @@ export class ActivityExtractor {
         err,
       )
       await this.markCompleted(task.record.offset)
+      try {
+        this.config.onTaskComplete?.(task.record.payload, 'dead-lettered')
+      } catch (e) {
+        log.warn('[ActivityExtractor] onTaskComplete callback error (dead-lettered):', e)
+      }
     }
   }
 
