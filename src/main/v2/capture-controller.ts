@@ -42,7 +42,7 @@ export function createV2CaptureController(params: {
 
   return {
     isCapturingNow(): boolean {
-      return state !== 'stopped'
+      return state === 'starting' || state === 'running'
     },
     startCapture(): void {
       if (state === 'running' || state === 'starting') return
