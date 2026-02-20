@@ -5,6 +5,7 @@ import { StorageService, StoredActivity } from './index'
 import { getMigrationStatus, ensureMigrationsTable, runMigrations } from './migrator'
 import { migration as migration0001 } from './migrations/0001_initial_schema'
 import { migration as migration0002 } from './migrations/0002_migrate_context_events'
+import { migration as migration0003 } from './migrations/0003_fts_sync_triggers'
 import * as path from 'path'
 import * as fs from 'fs'
 
@@ -159,6 +160,7 @@ describe('StorageService', () => {
         createStoredActivity({
           id: 'fts-old',
           startTimestamp: 1000,
+          endTimestamp: 2000,
           summary: 'TypeScript early',
         }),
       )
@@ -166,6 +168,7 @@ describe('StorageService', () => {
         createStoredActivity({
           id: 'fts-new',
           startTimestamp: 5000,
+          endTimestamp: 6000,
           summary: 'TypeScript later',
         }),
       )
@@ -249,6 +252,7 @@ describe('StorageService', () => {
         createStoredActivity({
           id: 'vec-old',
           startTimestamp: 1000,
+          endTimestamp: 2000,
           vector: v(1.0),
         }),
       )
@@ -256,6 +260,7 @@ describe('StorageService', () => {
         createStoredActivity({
           id: 'vec-new',
           startTimestamp: 5000,
+          endTimestamp: 6000,
           vector: v(0.9, 0.1),
         }),
       )
@@ -273,6 +278,7 @@ describe('StorageService', () => {
         createStoredActivity({
           id: 'combo-1',
           startTimestamp: 1000,
+          endTimestamp: 1500,
           appName: 'VS Code',
           vector: v(1.0),
         }),
@@ -281,6 +287,7 @@ describe('StorageService', () => {
         createStoredActivity({
           id: 'combo-2',
           startTimestamp: 3000,
+          endTimestamp: 3500,
           appName: 'VS Code',
           vector: v(0.9, 0.1),
         }),
@@ -289,6 +296,7 @@ describe('StorageService', () => {
         createStoredActivity({
           id: 'combo-3',
           startTimestamp: 3000,
+          endTimestamp: 3500,
           appName: 'Chrome',
           vector: v(0.8, 0.2),
         }),
@@ -374,9 +382,15 @@ describe('StorageService', () => {
     })
 
     it('should filter by time range', async () => {
-      await storage.addActivity(createStoredActivity({ id: 'range-1', startTimestamp: 1000 }))
-      await storage.addActivity(createStoredActivity({ id: 'range-2', startTimestamp: 2000 }))
-      await storage.addActivity(createStoredActivity({ id: 'range-3', startTimestamp: 3000 }))
+      await storage.addActivity(
+        createStoredActivity({ id: 'range-1', startTimestamp: 1000, endTimestamp: 1400 }),
+      )
+      await storage.addActivity(
+        createStoredActivity({ id: 'range-2', startTimestamp: 2000, endTimestamp: 2400 }),
+      )
+      await storage.addActivity(
+        createStoredActivity({ id: 'range-3', startTimestamp: 3000, endTimestamp: 3400 }),
+      )
 
       const results = await storage.getActivitiesByTimeRange(1500, 2500)
 
@@ -385,9 +399,15 @@ describe('StorageService', () => {
     })
 
     it('should filter with only startTime', async () => {
-      await storage.addActivity(createStoredActivity({ id: 'start-1', startTimestamp: 1000 }))
-      await storage.addActivity(createStoredActivity({ id: 'start-2', startTimestamp: 2000 }))
-      await storage.addActivity(createStoredActivity({ id: 'start-3', startTimestamp: 3000 }))
+      await storage.addActivity(
+        createStoredActivity({ id: 'start-1', startTimestamp: 1000, endTimestamp: 1500 }),
+      )
+      await storage.addActivity(
+        createStoredActivity({ id: 'start-2', startTimestamp: 2000, endTimestamp: 2500 }),
+      )
+      await storage.addActivity(
+        createStoredActivity({ id: 'start-3', startTimestamp: 3000, endTimestamp: 3500 }),
+      )
 
       const results = await storage.getActivitiesByTimeRange(2000, null)
 
@@ -397,9 +417,15 @@ describe('StorageService', () => {
     })
 
     it('should filter with only endTime', async () => {
-      await storage.addActivity(createStoredActivity({ id: 'end-1', startTimestamp: 1000 }))
-      await storage.addActivity(createStoredActivity({ id: 'end-2', startTimestamp: 2000 }))
-      await storage.addActivity(createStoredActivity({ id: 'end-3', startTimestamp: 3000 }))
+      await storage.addActivity(
+        createStoredActivity({ id: 'end-1', startTimestamp: 1000, endTimestamp: 1500 }),
+      )
+      await storage.addActivity(
+        createStoredActivity({ id: 'end-2', startTimestamp: 2000, endTimestamp: 2500 }),
+      )
+      await storage.addActivity(
+        createStoredActivity({ id: 'end-3', startTimestamp: 3000, endTimestamp: 3500 }),
+      )
 
       const results = await storage.getActivitiesByTimeRange(null, 2000)
 
@@ -473,6 +499,201 @@ describe('StorageService', () => {
 
       await storage.addActivity(createStoredActivity({ id: 'count-2' }))
       expect(await storage.countRows()).toBe(2)
+    })
+  })
+
+  describe('getDbPath and getDbSize', () => {
+    it('should return the configured database path', () => {
+      expect(storage.getDbPath()).toBe(TEST_DB_PATH)
+    })
+
+    it('should return a positive size for an initialized database', () => {
+      expect(storage.getDbSize()).toBeGreaterThan(0)
+    })
+
+    it('should return 0 for a non-existent path', () => {
+      const nonExistent = new StorageService('/tmp/does-not-exist-12345.db')
+      expect(nonExistent.getDbSize()).toBe(0)
+    })
+  })
+
+  describe('addActivity edge cases', () => {
+    it('should reject duplicate IDs with a PRIMARY KEY violation', async () => {
+      await storage.addActivity(createStoredActivity({ id: 'dup-1' }))
+      await expect(storage.addActivity(createStoredActivity({ id: 'dup-1' }))).rejects.toThrow()
+    })
+  })
+
+  describe('searchActivitiesFTS additional', () => {
+    it('should return results in BM25 ranking order', async () => {
+      // Activity with "TypeScript" in both summary AND ocrText should rank higher
+      await storage.addActivity(
+        createStoredActivity({
+          id: 'rank-low',
+          summary: 'Reading documentation',
+          ocrText: 'mentions TypeScript once',
+        }),
+      )
+      await storage.addActivity(
+        createStoredActivity({
+          id: 'rank-high',
+          summary: 'TypeScript TypeScript TypeScript',
+          ocrText: 'TypeScript handbook',
+        }),
+      )
+
+      const results = await storage.searchActivitiesFTS('TypeScript', 10)
+
+      expect(results.length).toBe(2)
+      expect(results[0].id).toBe('rank-high')
+    })
+
+    it('should return empty array for whitespace-only query', async () => {
+      await storage.addActivity(createStoredActivity({ id: 'ws-1', summary: 'some text' }))
+
+      const results = await storage.searchActivitiesFTS('   ', 10)
+      expect(results).toEqual([])
+    })
+  })
+
+  describe('searchActivitiesVectors additional', () => {
+    it('should round-trip vector values through Float32 precision', async () => {
+      const original = v(0.123456789, -0.987654321, 0.5)
+      await storage.addActivity(createStoredActivity({ id: 'precision-1', vector: original }))
+
+      const retrieved = await storage.getActivitiesByIds(['precision-1'])
+      expect(retrieved.length).toBe(1)
+      expect(retrieved[0].vector.length).toBe(384)
+
+      // Float32 has ~7 digits of precision
+      for (let i = 0; i < 3; i++) {
+        expect(retrieved[0].vector[i]).toBeCloseTo(original[i], 5)
+      }
+      // Remaining values should be 0
+      for (let i = 3; i < 384; i++) {
+        expect(retrieved[0].vector[i]).toBe(0)
+      }
+    })
+  })
+
+  describe('getActivitiesByTimeRange additional', () => {
+    it('should include activities that overlap the queried range', async () => {
+      // Activity spans 1900–2100, query range is 2000–2050
+      await storage.addActivity(
+        createStoredActivity({ id: 'overlap-1', startTimestamp: 1900, endTimestamp: 2100 }),
+      )
+
+      const results = await storage.getActivitiesByTimeRange(2000, 2050)
+
+      expect(results.length).toBe(1)
+      expect(results[0].id).toBe('overlap-1')
+    })
+
+    it('should include activities at exact boundaries', async () => {
+      await storage.addActivity(
+        createStoredActivity({ id: 'boundary-1', startTimestamp: 1000, endTimestamp: 2000 }),
+      )
+
+      // startTime == endTimestamp: activity ends exactly at query start
+      const atEnd = await storage.getActivitiesByTimeRange(2000, 3000)
+      expect(atEnd.length).toBe(1)
+
+      // endTime == startTimestamp: activity starts exactly at query end
+      const atStart = await storage.getActivitiesByTimeRange(500, 1000)
+      expect(atStart.length).toBe(1)
+    })
+
+    it('should return empty when startTime > endTime (no valid range)', async () => {
+      await storage.addActivity(
+        createStoredActivity({ id: 'inv-1', startTimestamp: 1000, endTimestamp: 2000 }),
+      )
+
+      const results = await storage.getActivitiesByTimeRange(3000, 500)
+      expect(results).toEqual([])
+    })
+  })
+
+  describe('getActivitiesByIds additional', () => {
+    it('should return only found rows when mixing valid and non-existent IDs', async () => {
+      await storage.addActivity(createStoredActivity({ id: 'exists-1' }))
+
+      const results = await storage.getActivitiesByIds(['exists-1', 'nope', 'also-nope'])
+      expect(results.length).toBe(1)
+      expect(results[0].id).toBe('exists-1')
+    })
+
+    it('should handle duplicate IDs in input', async () => {
+      await storage.addActivity(createStoredActivity({ id: 'dup-input-1' }))
+
+      const results = await storage.getActivitiesByIds(['dup-input-1', 'dup-input-1'])
+      // SQLite IN clause de-duplicates
+      expect(results.length).toBe(1)
+    })
+
+    it('should return empty array for empty input', async () => {
+      const results = await storage.getActivitiesByIds([])
+      expect(results).toEqual([])
+    })
+  })
+
+  describe('lifecycle', () => {
+    it('should allow close() then re-init()', async () => {
+      await storage.addActivity(createStoredActivity({ id: 'life-1' }))
+      await storage.close()
+
+      await storage.init()
+      const results = await storage.getActivitiesByIds(['life-1'])
+      expect(results.length).toBe(1)
+    })
+
+    it('should handle double close() without error', async () => {
+      await storage.close()
+      await expect(storage.close()).resolves.toBeUndefined()
+    })
+  })
+
+  describe('FTS triggers (update and delete)', () => {
+    it('should reflect updated text in FTS search after UPDATE', async () => {
+      await storage.addActivity(
+        createStoredActivity({ id: 'trig-1', summary: 'original summary', ocrText: 'original' }),
+      )
+
+      // Verify original is searchable
+      let results = await storage.searchActivitiesFTS('original', 10)
+      expect(results.length).toBe(1)
+
+      // Directly update the activity row (StorageService doesn't expose update, use raw SQL)
+      const db = new Database(TEST_DB_PATH)
+      db.prepare(
+        "UPDATE activities SET summary = 'updated summary', ocr_text = 'updated' WHERE id = 'trig-1'",
+      ).run()
+      db.close()
+
+      // Old text should no longer match
+      results = await storage.searchActivitiesFTS('original', 10)
+      expect(results.length).toBe(0)
+
+      // New text should match
+      results = await storage.searchActivitiesFTS('updated', 10)
+      expect(results.length).toBe(1)
+      expect(results[0].id).toBe('trig-1')
+    })
+
+    it('should remove deleted rows from FTS index', async () => {
+      await storage.addActivity(
+        createStoredActivity({ id: 'trig-del', summary: 'deletable content' }),
+      )
+
+      let results = await storage.searchActivitiesFTS('deletable', 10)
+      expect(results.length).toBe(1)
+
+      // Directly delete
+      const db = new Database(TEST_DB_PATH)
+      db.prepare("DELETE FROM activities WHERE id = 'trig-del'").run()
+      db.close()
+
+      results = await storage.searchActivitiesFTS('deletable', 10)
+      expect(results.length).toBe(0)
     })
   })
 })
@@ -753,7 +974,7 @@ describe('migration system', () => {
     deleteDbFiles(SYSTEM_DB_PATH)
   })
 
-  it('should apply all 2 migrations on a fresh database', async () => {
+  it('should apply all 3 migrations on a fresh database', async () => {
     deleteDbFiles(SYSTEM_DB_PATH)
 
     const storage = new StorageService(SYSTEM_DB_PATH)
@@ -766,9 +987,10 @@ describe('migration system', () => {
     }[]
     db.close()
 
-    expect(rows.length).toBe(2)
+    expect(rows.length).toBe(3)
     expect(rows[0].name).toBe('0001_initial_schema')
     expect(rows[1].name).toBe('0002_migrate_context_events')
+    expect(rows[2].name).toBe('0003_fts_sync_triggers')
   })
 
   it('should not re-apply migrations on second init', async () => {
@@ -786,8 +1008,8 @@ describe('migration system', () => {
     const rows = db.prepare('SELECT name FROM schema_migrations').all() as { name: string }[]
     db.close()
 
-    // Still exactly 2 rows — no duplicates
-    expect(rows.length).toBe(2)
+    // Still exactly 3 rows — no duplicates
+    expect(rows.length).toBe(3)
   })
 
   it('getMigrationStatus returns correct applied state after init', async () => {
@@ -801,7 +1023,7 @@ describe('migration system', () => {
     const status = getMigrationStatus(db)
     db.close()
 
-    expect(status.length).toBe(2)
+    expect(status.length).toBe(3)
     for (const s of status) {
       expect(s.applied).toBe(true)
       expect(s.appliedAt).toBeGreaterThan(0)
@@ -816,7 +1038,7 @@ describe('migration system', () => {
     const status = getMigrationStatus(db)
     db.close()
 
-    expect(status.length).toBe(2)
+    expect(status.length).toBe(3)
     for (const s of status) {
       expect(s.applied).toBe(false)
       expect(s.appliedAt).toBeNull()
@@ -877,8 +1099,9 @@ describe('migration system', () => {
     ).count
     db.close()
 
-    expect(migrationRows.length).toBe(2)
+    expect(migrationRows.length).toBe(3)
     expect(migrationRows[1].name).toBe('0002_migrate_context_events')
+    expect(migrationRows[2].name).toBe('0003_fts_sync_triggers')
     expect(activityCount).toBe(1)
   })
 
@@ -929,7 +1152,7 @@ describe('migration system', () => {
     }[]
     db.close()
 
-    expect(migrationRows.length).toBe(2)
+    expect(migrationRows.length).toBe(3)
   })
 })
 
@@ -1029,13 +1252,41 @@ describe('migration idempotency', () => {
     db.close()
   })
 
+  it('migration 0003 up() does not throw when called twice', () => {
+    const db = makeMigrationDb()
+    migration0001.up(db)
+    expect(() => {
+      migration0003.up(db)
+      migration0003.up(db)
+    }).not.toThrow()
+    db.close()
+  })
+
+  it('migration 0003 up() creates each trigger exactly once', () => {
+    const db = makeMigrationDb()
+    migration0001.up(db)
+    migration0003.up(db)
+    migration0003.up(db)
+
+    const count = (name: string) =>
+      (
+        db
+          .prepare(`SELECT COUNT(*) as n FROM sqlite_master WHERE type='trigger' AND name=?`)
+          .get(name) as { n: number }
+      ).n
+
+    expect(count('activities_ad')).toBe(1)
+    expect(count('activities_au')).toBe(1)
+    db.close()
+  })
+
   it('runMigrations called twice records each migration exactly once', () => {
     const db = makeMigrationDb()
     runMigrations(db)
     runMigrations(db)
 
     const rows = db.prepare('SELECT name FROM schema_migrations').all() as { name: string }[]
-    expect(rows.length).toBe(2)
+    expect(rows.length).toBe(3)
     db.close()
   })
 })

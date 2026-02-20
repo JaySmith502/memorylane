@@ -363,7 +363,7 @@ export class StorageService {
     const params: unknown[] = []
 
     if (startTime !== null) {
-      conditions.push('start_timestamp >= ?')
+      conditions.push('end_timestamp >= ?')
       params.push(startTime)
     }
     if (endTime !== null) {
@@ -408,18 +408,6 @@ export class StorageService {
       .all(...ids) as Record<string, unknown>[]
 
     return rows.map((row) => this.rowToStoredActivity(row))
-  }
-
-  /**
-   * Returns the total number of activities in the database.
-   */
-  public async countActivityRows(): Promise<number> {
-    if (!this.db) {
-      await this.init()
-    }
-    if (!this.db) return 0
-
-    return this.getActivityRowCount()
   }
 
   // ---------------------------------------------------------------------------
@@ -480,7 +468,7 @@ export class StorageService {
     if (!filters) return { conditions, params }
 
     if (filters.startTime !== undefined) {
-      conditions.push('a.start_timestamp >= ?')
+      conditions.push('a.end_timestamp >= ?')
       params.push(filters.startTime)
     }
     if (filters.endTime !== undefined) {
