@@ -77,20 +77,14 @@ function getExecutable(): ScreenshotExecutable {
     throw new Error(`screenshot binary not found at ${binaryPath}`)
   }
 
-  const scriptPath = path.resolve(
-    process.cwd(),
-    'src',
-    'main',
-    'v2',
-    'recorder',
-    'swift',
-    'screenshot.swift',
-  )
-  if (fs.existsSync(scriptPath)) {
-    return { command: 'swift', args: [scriptPath] }
+  const devBinaryPath = path.resolve(process.cwd(), 'build', 'swift', 'screenshot')
+  if (fs.existsSync(devBinaryPath)) {
+    return { command: devBinaryPath, args: [] }
   }
 
-  throw new Error(`screenshot swift script not found at ${scriptPath}`)
+  throw new Error(
+    `screenshot binary not found at ${devBinaryPath}. Run "npm run build:swift" before starting capture.`,
+  )
 }
 
 function ensureParentDirExists(outputPath: string): void {

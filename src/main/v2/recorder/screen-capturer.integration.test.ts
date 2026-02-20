@@ -15,8 +15,6 @@ const RUN_OUTPUT_DIR = path.join(OUTPUT_ROOT_DIR, new Date().toISOString().repla
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
-let previousExecutableOverride: string | undefined
-
 function assertPng(pathname: string): void {
   expect(fs.existsSync(pathname)).toBe(true)
   const bytes = fs.readFileSync(pathname)
@@ -50,8 +48,6 @@ describeIntegration('screen capturer integration', () => {
     }
 
     fs.mkdirSync(RUN_OUTPUT_DIR, { recursive: true })
-    previousExecutableOverride = process.env.MEMORYLANE_SCREENSHOT_EXECUTABLE
-    process.env.MEMORYLANE_SCREENSHOT_EXECUTABLE = SCREENSHOT_BINARY_PATH
   })
 
   beforeEach(() => {
@@ -70,11 +66,7 @@ describeIntegration('screen capturer integration', () => {
   })
 
   afterAll(() => {
-    if (previousExecutableOverride === undefined) {
-      delete process.env.MEMORYLANE_SCREENSHOT_EXECUTABLE
-    } else {
-      process.env.MEMORYLANE_SCREENSHOT_EXECUTABLE = previousExecutableOverride
-    }
+    delete process.env.MEMORYLANE_SCREENSHOT_EXECUTABLE
   })
 
   it('captures frames at regular intervals', async () => {
