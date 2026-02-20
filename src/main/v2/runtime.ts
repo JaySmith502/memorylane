@@ -14,7 +14,7 @@ import { createV2PipelineHarness } from './pipeline-harness'
 import { DefaultActivityTransformer } from './activity-transformer'
 import { SqliteActivitySink } from './sqlite-activity-sink'
 import { FfmpegVideoStitcher } from './video/video-stitcher'
-import { V2ActivitySemanticService } from './activity-semantic-service'
+import { V2ActivitySemanticService, V2SemanticFileDebugDumper } from './activity-semantic-service'
 import {
   createV2CaptureController,
   type RuntimeCapture,
@@ -44,9 +44,19 @@ export async function createV2MainRuntime(params?: {
   const storage = new StorageService(StorageService.getDefaultDbPath())
   const usageTracker = new UsageTracker()
 
+  const debugDumper =
+    !app.isPackaged && process.env.DEBUG_PIPELINE
+      ? new V2SemanticFileDebugDumper({
+          rootDir: path.join(app.getAppPath(), '.debug-pipeline'),
+          cleanRootDir: true,
+          copyMediaAssets: true,
+        })
+      : undefined
+
   const savedEndpoint = customEndpointManager.getEndpoint()
   const semanticService = new V2ActivitySemanticService(apiKeyManager.getApiKey() || undefined, {
     usageTracker,
+    debugDumper,
     endpointConfig: savedEndpoint
       ? {
           serverURL: savedEndpoint.serverURL,
