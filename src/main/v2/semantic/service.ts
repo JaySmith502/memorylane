@@ -3,19 +3,22 @@ import log from '../../logger'
 import { UsageTracker } from '../../services/usage-tracker'
 import type { V2Activity } from '../activity-types'
 import type { ActivitySemanticService } from '../activity-transformer-types'
+import { DEFAULT_SNAPSHOT_MODELS, DEFAULT_VIDEO_MODELS } from './constants'
 import {
-  DEFAULT_SNAPSHOT_MODELS,
-  DEFAULT_VIDEO_MODELS,
-  MODEL_PRICING_USD_PER_MILLION,
-} from './constants'
+  customEndpointVideoUnsupportedCacheKey,
+  getEffectiveSemanticModels,
+  isLikelyCustomEndpointVideoUnsupportedError,
+  normalizeCustomEndpointModel,
+} from './custom-endpoint-video-fallback'
 import { tryLoadVideoAsDataUrl, encodeSnapshots } from './media'
+import { trySemanticModelChain } from './model-chain'
 import { buildSemanticPrompt } from './prompt'
+import { describeSemanticError } from './response-utils'
 import { selectSnapshotFrames } from './sampling'
+import { recordSemanticUsageSafe } from './usage-recording'
 import type {
-  AttemptResult,
-  ChatRequest,
   ChatContentItem,
-  ChatResponseLike,
+  ChatRequest,
   SemanticMode,
   SemanticChatClient,
   V2ActivitySemanticServiceConfig,
@@ -119,7 +122,7 @@ export class V2ActivitySemanticService implements ActivitySemanticService {
     if (config) {
       this.isCustomEndpoint = true
       this.customEndpointServerURL = config.serverURL
-      this.customEndpointModel = this.normalizeCustomModel(config.model)
+      this.customEndpointModel = normalizeCustomEndpointModel(config.model)
       const effectiveKey = config.apiKey ?? ''
       this.client = new OpenRouter({
         apiKey: effectiveKey,
@@ -196,7 +199,9 @@ export class V2ActivitySemanticService implements ActivitySemanticService {
         diagnostics.videoSizeBytes = videoAsset.sizeBytes
         diagnostics.videoMimeType = videoAsset.mimeType
 
-        const videoResult = await this.tryModelChain({
+        const videoResult = await trySemanticModelChain({
+          client: this.client,
+          requestTimeoutMs: this.requestTimeoutMs,
           mode: 'video',
           models: this.getEffectiveVideoModels(),
           prompt: videoPrompt,
@@ -205,6 +210,20 @@ export class V2ActivitySemanticService implements ActivitySemanticService {
             { type: 'text', text: videoPrompt },
             { type: 'input_video', videoUrl: { url: videoAsset.dataUrl } },
           ],
+          onRecordUsage: ({ model, promptTokens, completionTokens }) => {
+            recordSemanticUsageSafe({
+              usageTracker: this.usageTracker,
+              model,
+              promptTokens,
+              completionTokens,
+            })
+          },
+          onDumpRoundTrip: (roundTrip) => this.dumpRoundTripSafe(roundTrip),
+          onAttemptFailed: ({ mode, model, error }) => {
+            if (mode === 'video' && this.isLikelyVideoUnsupportedError(error)) {
+              this.markCustomEndpointVideoUnsupported(model, error)
+            }
+          },
         })
 
         if (videoResult) {
@@ -235,7 +254,7 @@ export class V2ActivitySemanticService implements ActivitySemanticService {
       onEncodeError: ({ filepath, error }) => {
         log.warn(
           '[V2ActivitySemanticService] Failed to encode snapshot frame',
-          JSON.stringify({ filepath, error: this.describeError(error) }),
+          JSON.stringify({ filepath, error: describeSemanticError(error) }),
         )
       },
     })
@@ -244,7 +263,9 @@ export class V2ActivitySemanticService implements ActivitySemanticService {
     }
 
     const snapshotPrompt = buildSemanticPrompt(input.activity, 'snapshot')
-    const snapshotResult = await this.tryModelChain({
+    const snapshotResult = await trySemanticModelChain({
+      client: this.client,
+      requestTimeoutMs: this.requestTimeoutMs,
       mode: 'snapshot',
       models: this.getEffectiveSnapshotModels(),
       prompt: snapshotPrompt,
@@ -259,6 +280,15 @@ export class V2ActivitySemanticService implements ActivitySemanticService {
         }
         return content
       },
+      onRecordUsage: ({ model, promptTokens, completionTokens }) => {
+        recordSemanticUsageSafe({
+          usageTracker: this.usageTracker,
+          model,
+          promptTokens,
+          completionTokens,
+        })
+      },
+      onDumpRoundTrip: (roundTrip) => this.dumpRoundTripSafe(roundTrip),
     })
 
     if (snapshotResult) {
@@ -295,279 +325,28 @@ export class V2ActivitySemanticService implements ActivitySemanticService {
     }
   }
 
-  private async tryModelChain(params: {
-    mode: SemanticMode
-    models: string[]
-    prompt: string
-    diagnostics: V2SemanticRunDiagnostics
-    buildContent: (model: string) => ChatContentItem[]
-  }): Promise<AttemptResult | null> {
-    if (params.models.length === 0) {
-      return null
-    }
-
-    for (const model of params.models) {
-      const request: ChatRequest = {
-        model,
-        messages: [
-          {
-            role: 'user',
-            content: params.buildContent(model),
-          },
-        ],
-      }
-      const requestJson = this.safeStringify(request)
-      const startedAt = Date.now()
-
-      try {
-        const response = (await this.withTimeout(
-          this.client!.chat.send(request),
-          this.requestTimeoutMs,
-          `semantic model request timed out after ${this.requestTimeoutMs}ms`,
-        )) as ChatResponseLike
-
-        const responseJson = this.safeStringify(response)
-        const summary = this.extractSummary(response)
-        const usage = this.extractUsage(response)
-        const durationMs = Date.now() - startedAt
-
-        if (summary.length === 0) {
-          params.diagnostics.attempts.push({
-            mode: params.mode,
-            model,
-            durationMs,
-            success: false,
-            error: 'empty summary',
-            promptTokens: usage.promptTokens,
-            completionTokens: usage.completionTokens,
-          })
-
-          this.dumpRoundTripSafe({
-            activityId: params.diagnostics.activityId,
-            mode: params.mode,
-            model,
-            startedAt,
-            durationMs,
-            success: false,
-            request,
-            error: 'empty summary',
-            requestJson,
-            responseJson,
-            summary,
-          })
-          continue
-        }
-
-        params.diagnostics.attempts.push({
-          mode: params.mode,
-          model,
-          durationMs,
-          success: true,
-          promptTokens: usage.promptTokens,
-          completionTokens: usage.completionTokens,
-        })
-
-        this.recordUsageSafe({
-          model,
-          promptTokens: usage.promptTokens,
-          completionTokens: usage.completionTokens,
-        })
-
-        this.dumpRoundTripSafe({
-          activityId: params.diagnostics.activityId,
-          mode: params.mode,
-          model,
-          startedAt,
-          durationMs,
-          success: true,
-          request,
-          requestJson,
-          responseJson,
-          summary,
-        })
-
-        log.info(
-          '[V2ActivitySemanticService] Semantic summary succeeded',
-          JSON.stringify({
-            activityId: params.diagnostics.activityId,
-            mode: params.mode,
-            model,
-            durationMs,
-            promptChars: params.prompt.length,
-            attemptsSoFar: params.diagnostics.attempts.length,
-          }),
-        )
-
-        return { summary, model }
-      } catch (error) {
-        const durationMs = Date.now() - startedAt
-        const detail = this.describeError(error)
-
-        params.diagnostics.attempts.push({
-          mode: params.mode,
-          model,
-          durationMs,
-          success: false,
-          error: detail,
-        })
-
-        this.dumpRoundTripSafe({
-          activityId: params.diagnostics.activityId,
-          mode: params.mode,
-          model,
-          startedAt,
-          durationMs,
-          success: false,
-          request,
-          requestJson,
-          error: detail,
-        })
-
-        log.warn(
-          '[V2ActivitySemanticService] Semantic attempt failed',
-          JSON.stringify({
-            activityId: params.diagnostics.activityId,
-            mode: params.mode,
-            model,
-            durationMs,
-            error: detail,
-          }),
-        )
-
-        if (params.mode === 'video' && this.isLikelyVideoUnsupportedError(detail)) {
-          this.markCustomEndpointVideoUnsupported(model, detail)
-        }
-      }
-    }
-
-    return null
-  }
-
-  private extractSummary(response: ChatResponseLike): string {
-    const content = response.choices?.[0]?.message?.content
-
-    if (typeof content === 'string') {
-      return content.trim()
-    }
-
-    if (Array.isArray(content)) {
-      const textParts = content
-        .map((part) => {
-          if (!part || typeof part !== 'object') return ''
-          const maybeText = (part as { text?: unknown }).text
-          return typeof maybeText === 'string' ? maybeText : ''
-        })
-        .filter((value) => value.length > 0)
-
-      return textParts.join(' ').trim()
-    }
-
-    return ''
-  }
-
-  private extractUsage(response: ChatResponseLike): {
-    promptTokens: number
-    completionTokens: number
-  } {
-    const usage = response.usage
-    if (!usage) {
-      return {
-        promptTokens: 0,
-        completionTokens: 0,
-      }
-    }
-
-    const promptTokens = usage.promptTokens ?? usage.prompt_tokens ?? 0
-    const completionTokens = usage.completionTokens ?? usage.completion_tokens ?? 0
-
-    return {
-      promptTokens,
-      completionTokens,
-    }
-  }
-
-  private recordUsageSafe(input: {
-    model: string
-    promptTokens: number
-    completionTokens: number
-  }): void {
-    const pricing = MODEL_PRICING_USD_PER_MILLION[input.model]
-    const cost =
-      pricing === undefined
-        ? 0
-        : (input.promptTokens / 1_000_000) * pricing.input_tokens_per_million +
-          (input.completionTokens / 1_000_000) * pricing.completion_tokens_per_million
-
-    try {
-      this.usageTracker?.recordUsage({
-        prompt_tokens: input.promptTokens,
-        completion_tokens: input.completionTokens,
-        cost,
-      })
-    } catch (error) {
-      log.warn(
-        '[V2ActivitySemanticService] Usage tracking failed',
-        JSON.stringify({
-          model: input.model,
-          error: this.describeError(error),
-        }),
-      )
-    }
-  }
-
-  private async withTimeout<T>(
-    promise: Promise<T>,
-    timeoutMs: number,
-    message: string,
-  ): Promise<T> {
-    let timeoutHandle: NodeJS.Timeout | null = null
-
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutHandle = setTimeout(() => {
-        reject(new Error(message))
-      }, timeoutMs)
-    })
-
-    try {
-      return await Promise.race([promise, timeoutPromise])
-    } finally {
-      if (timeoutHandle) {
-        clearTimeout(timeoutHandle)
-      }
-    }
-  }
-
-  private describeError(error: unknown): string {
-    if (error instanceof Error) {
-      return error.message
-    }
-    return String(error)
-  }
-
   private getEffectiveVideoModels(): string[] {
-    if (this.isCustomEndpoint && this.customEndpointModel) {
-      return [this.customEndpointModel]
-    }
-    return [...this.videoModels]
+    return getEffectiveSemanticModels({
+      isCustomEndpoint: this.isCustomEndpoint,
+      customEndpointModel: this.customEndpointModel,
+      defaultModels: this.videoModels,
+    })
   }
 
   private getEffectiveSnapshotModels(): string[] {
-    if (this.isCustomEndpoint && this.customEndpointModel) {
-      return [this.customEndpointModel]
-    }
-    return [...this.snapshotModels]
-  }
-
-  private normalizeCustomModel(model: string | null | undefined): string | null {
-    if (typeof model !== 'string') return null
-    const normalized = model.trim()
-    return normalized.length > 0 ? normalized : null
+    return getEffectiveSemanticModels({
+      isCustomEndpoint: this.isCustomEndpoint,
+      customEndpointModel: this.customEndpointModel,
+      defaultModels: this.snapshotModels,
+    })
   }
 
   private customEndpointCacheKey(): string | null {
-    if (!this.isCustomEndpoint) return null
-    if (!this.customEndpointServerURL || !this.customEndpointModel) return null
-    return `${this.customEndpointServerURL}::${this.customEndpointModel}`
+    return customEndpointVideoUnsupportedCacheKey({
+      isCustomEndpoint: this.isCustomEndpoint,
+      serverURL: this.customEndpointServerURL,
+      model: this.customEndpointModel,
+    })
   }
 
   private shouldSkipCustomEndpointVideo(): boolean {
@@ -595,31 +374,7 @@ export class V2ActivitySemanticService implements ActivitySemanticService {
 
   private isLikelyVideoUnsupportedError(message: string): boolean {
     if (!this.isCustomEndpoint) return false
-
-    const text = message.toLowerCase()
-    if (text.includes('input_video')) return true
-    if (text.includes('invalid message format')) return true
-
-    const hasVideoCue = ['video', 'mp4'].some((cue) => text.includes(cue))
-    if (!hasVideoCue) return false
-
-    return [
-      'unsupported',
-      'not supported',
-      'does not support',
-      'only image',
-      'images only',
-      'invalid type',
-      'unknown type',
-    ].some((cue) => text.includes(cue))
-  }
-
-  private safeStringify(value: unknown): string {
-    try {
-      return `${JSON.stringify(value, null, 2)}\n`
-    } catch (error) {
-      return `${JSON.stringify({ error: this.describeError(error) }, null, 2)}\n`
-    }
+    return isLikelyCustomEndpointVideoUnsupportedError(message)
   }
 
   private dumpRoundTripSafe(input: {
@@ -644,7 +399,7 @@ export class V2ActivitySemanticService implements ActivitySemanticService {
           activityId: input.activityId,
           mode: input.mode,
           model: input.model,
-          error: this.describeError(error),
+          error: describeSemanticError(error),
         }),
       )
     }
@@ -655,7 +410,7 @@ export class V2ActivitySemanticService implements ActivitySemanticService {
       const effectiveKey = endpointConfig.apiKey ?? this.openRouterApiKey ?? ''
       this.isCustomEndpoint = true
       this.customEndpointServerURL = endpointConfig.serverURL
-      this.customEndpointModel = this.normalizeCustomModel(endpointConfig.model)
+      this.customEndpointModel = normalizeCustomEndpointModel(endpointConfig.model)
       this.client = new OpenRouter({
         apiKey: effectiveKey,
         serverURL: endpointConfig.serverURL,
