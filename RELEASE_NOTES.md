@@ -1,14 +1,10 @@
-# MemoryLane v0.12.0
+# MemoryLane v0.12.1
 
 MemoryLane is a macOS system tray app that captures your screen activity, processes it with OCR and AI summarization, and makes it searchable through an MCP server — giving AI assistants like Claude and Cursor memory of what you've been working on.
 
 ## What's Changed
 
-- **V2 runtime pipeline** — introduced a full v2 activity runtime with durable streams, coordinated extraction/production stages, and richer activity lifecycle handling
-- **Video-first semantic processing** — added ffmpeg-based activity video stitching and a semantic service that prefers stitched media with robust snapshot fallback behavior
-- **Pattern intelligence and MCP improvements** — added pattern detection infrastructure, storage/repository support, and MCP tool/prompt enhancements for better context retrieval
-- **Native capture hardening on macOS** — improved v2 screenshot capture via ScreenCaptureKit/CoreGraphics paths, focused-window display tracking, and transient-failure tolerance
-- **Reliability, performance, and test depth** — reduced capture/media footprint, improved cleanup/shutdown semantics, and added broad unit/integration coverage across the v2 stack
+- **Fixed auto updater** — resolved an issue where the automatic update mechanism could fail to download and apply updates correctly
 
 ## Features
 
@@ -60,4 +56,4 @@ After launching:
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v0.11.0...v0.12.0
+https://github.com/deusXmachina-dev/memorylane/compare/v0.12.0...v0.12.1
