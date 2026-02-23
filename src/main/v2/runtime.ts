@@ -11,6 +11,7 @@ import { EmbeddingService } from '../processor/embedding'
 import { activityOcrService } from '../processor/ocr'
 import { UsageTracker } from '../services/usage-tracker'
 import { createV2PipelineHarness } from './pipeline-harness'
+import { disposeNativeScreenshotHelper } from './recorder/native-screenshot'
 import { DefaultActivityTransformer } from './activity-transformer'
 import { SqliteActivitySink } from './sqlite-activity-sink'
 import { FfmpegVideoStitcher } from './video/video-stitcher'
@@ -131,6 +132,12 @@ export async function createV2MainRuntime(params?: {
           storage.close()
         } catch (error) {
           log.warn('[V2Runtime] Failed to close storage:', error)
+        }
+
+        try {
+          await disposeNativeScreenshotHelper()
+        } catch (error) {
+          log.warn('[V2Runtime] Failed to dispose screenshot helper:', error)
         }
       })()
 
