@@ -126,18 +126,22 @@ export function registerPrompts(server: McpServer): void {
                 'understand the evidence and the automation idea already stored with the pattern.\n' +
                 'If a pattern is unclear, use browse_timeline or search_context to examine ' +
                 'the underlying activity for more context.\n\n' +
-                '## Step 2 — Triage\n\n' +
-                'For each pattern, quickly decide:\n' +
+                '## Step 2 — Check existing skills\n\n' +
+                'Before creating anything, check what skills already exist. ' +
+                'Look for existing skill files and compare them against the detected patterns. ' +
+                'If a pattern already has a matching skill, skip it — do not recreate it. ' +
+                'Only proceed to step 3 for patterns that have no existing skill.\n\n' +
+                '## Step 3 — Triage\n\n' +
+                'For each pattern that lacks an existing skill, quickly decide:\n' +
                 '- **Automatable**: You can build a skill that does the thing (or most of it) ' +
-                'next time it comes up. Proceed to step 3.\n' +
+                'next time it comes up. Proceed to step 4.\n' +
                 '- **Not automatable**: The pattern is just normal work, requires too much ' +
                 'creative judgment, or has fewer than 2 sightings. Skip it — mention it in ' +
                 'the summary with a one-line reason.\n\n' +
                 'Be honest. "User writes code in VS Code" is not automatable. ' +
                 '"User copies Jira ticket ID, creates git branch, opens PR template" is.\n\n' +
-                '## Step 3 — Generate skills\n\n' +
-                'For each automatable pattern, write a Claude Code skill file to:\n' +
-                '`.claude/skills/<pattern-slug>/SKILL.md`\n\n' +
+                '## Step 4 — Generate skills\n\n' +
+                'For each automatable pattern, write a Claude Code skill file.\n\n' +
                 'The skill must follow this exact format:\n\n' +
                 '```\n' +
                 '---\n' +
@@ -164,9 +168,10 @@ export function registerPrompts(server: McpServer): void {
                 'the pattern detector and may already have good ideas.\n' +
                 '- Add `allowed-tools` in frontmatter if the skill needs specific tools ' +
                 '(e.g., `allowed-tools: Bash, Read, Write`).\n\n' +
-                '## Step 4 — Report\n\n' +
+                '## Step 5 — Report\n\n' +
                 'After writing all skill files, give a brief summary:\n' +
-                '- Which patterns got skills (with the `/skill-name` to invoke each)\n' +
+                '- Which patterns already had skills (no action needed)\n' +
+                '- Which patterns got new skills (with the `/skill-name` to invoke each)\n' +
                 '- Which patterns were skipped and why\n' +
                 '- Any patterns that are close to automatable but need more sightings first',
             },
