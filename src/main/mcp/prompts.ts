@@ -141,33 +141,13 @@ export function registerPrompts(server: McpServer): void {
                 'Be honest. "User writes code in VS Code" is not automatable. ' +
                 '"User copies Jira ticket ID, creates git branch, opens PR template" is.\n\n' +
                 '## Step 4 — Generate skills\n\n' +
-                'For each automatable pattern, write a Claude Code skill file.\n\n' +
-                'The skill must follow this exact format:\n\n' +
-                '```\n' +
-                '---\n' +
-                'name: <kebab-case-name>\n' +
-                'description: <Natural language description of when to use this skill. ' +
-                'Claude reads this to decide whether to auto-invoke, so write it as: ' +
-                '"Do X when the user Y." Include trigger phrases the user might say.>\n' +
-                '---\n\n' +
-                '# <Skill Title>\n\n' +
-                '<Instructions for Claude to execute the automation. Write these as if you ' +
-                'are telling a future Claude session exactly what to do. Be concrete:\n' +
-                '- Specific shell commands to run\n' +
-                '- Files to read or write\n' +
-                '- MCP tools to call (e.g., search_context, browse_timeline)\n' +
-                '- What to ask the user vs what to do automatically\n' +
-                '- Edge cases and what to do when things go wrong>\n' +
-                '```\n\n' +
-                'Key rules for generated skills:\n' +
-                '- The skill should be immediately executable by Claude — not a plan, not a ' +
-                'suggestion, but actual instructions Claude follows to do the work.\n' +
-                '- If the pattern involves apps Claude cannot control (e.g., clicking in a browser), ' +
-                'the skill should automate what it CAN do and tell the user what to do manually.\n' +
-                '- Build on the automation_idea already stored in the pattern — it was written by ' +
-                'the pattern detector and may already have good ideas.\n' +
-                '- Add `allowed-tools` in frontmatter if the skill needs specific tools ' +
-                '(e.g., `allowed-tools: Bash, Read, Write`).\n\n' +
+                'For each automatable pattern, use the skill-creator skill you have to create a new skill. ' +
+                'Provide it with a clear description of what the skill should do, based on:\n' +
+                '- The pattern name and description\n' +
+                '- The automation_idea stored in the pattern\n' +
+                '- Any additional context from sightings or activity details\n\n' +
+                'Let the skill-creator handle the file format and placement. ' +
+                'Just give it the best possible brief of what the skill needs to accomplish.\n\n' +
                 '## Step 5 — Report\n\n' +
                 'After writing all skill files, give a brief summary:\n' +
                 '- Which patterns already had skills (no action needed)\n' +
