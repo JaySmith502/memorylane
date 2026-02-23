@@ -11,7 +11,7 @@ import { PatternRepository } from './pattern-repository'
 export { ActivityRepository } from './activity-repository'
 export { PatternRepository } from './pattern-repository'
 export type { Pattern, PatternSighting, PatternWithStats } from './pattern-repository'
-export type { StoredActivity, ActivitySummary } from './types'
+export type { StoredActivity, ActivitySummary, ActivityDetail } from './types'
 
 /**
  * Loads the sqlite-vec extension into the given database.

@@ -1,16 +1,16 @@
 /**
  * Pattern detection service.
  *
- * Uses an agentic LLM loop (via OpenRouter) with local database tools to
- * discover recurring automatable patterns in activity history. Includes
- * built-in scheduling: call scheduleRun() on screen unlock and the service
- * handles interval guards, settle delays, and error isolation.
+ * Sends a full day's activities in a single LLM call (via OpenRouter) to
+ * discover recurring automatable patterns. Includes built-in scheduling:
+ * call scheduleRun() on screen unlock and the service handles interval
+ * guards, settle delays, and error isolation.
  */
 
 import { v4 as uuidv4, v5 as uuidv5 } from 'uuid'
 import { OpenRouter } from '@openrouter/sdk'
-import type { StorageService, ActivitySummary } from '../storage'
-import type { Pattern, PatternSighting } from '../storage/pattern-repository'
+import type { StorageService, ActivityDetail } from '../storage'
+import type { Pattern, PatternSighting, PatternWithStats } from '../storage/pattern-repository'
 import type { ApiKeyManager } from '../settings/api-key-manager'
 import { PATTERN_DETECTION_CONFIG } from '../../shared/constants'
 import log from '../logger'
@@ -21,13 +21,11 @@ import log from '../logger'
 
 export interface PatternDetectorConfig {
   model: string
-  maxIterations: number
   lookbackDays: number
 }
 
 export const DEFAULT_DETECTOR_CONFIG: PatternDetectorConfig = {
   model: PATTERN_DETECTION_CONFIG.MODEL,
-  maxIterations: 25,
   lookbackDays: PATTERN_DETECTION_CONFIG.LOOKBACK_DAYS,
 }
 
@@ -62,121 +60,6 @@ export interface DetectionRunResult {
 export type ProgressCallback = (message: string) => void
 
 // ---------------------------------------------------------------------------
-// Tool definitions (sent to the LLM)
-// ---------------------------------------------------------------------------
-
-const TOOLS = [
-  {
-    type: 'function' as const,
-    function: {
-      name: 'get_activities',
-      description:
-        'Get activity summaries within a time range. Returns id, timestamp, duration, app name, and LLM-generated summary.',
-      parameters: {
-        type: 'object',
-        properties: {
-          days_back: {
-            type: 'number',
-            description: 'Number of days back from now. Default 7.',
-          },
-          app_name: {
-            type: 'string',
-            description: 'Optional: filter by app name (case-insensitive)',
-          },
-          limit: {
-            type: 'number',
-            description:
-              'Max results. Default 50. Activities are uniformly sampled if there are more.',
-          },
-        },
-      },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'search_activities',
-      description:
-        'Full-text search across activity summaries and OCR text. Good for finding specific topics, files, URLs, or concepts.',
-      parameters: {
-        type: 'object',
-        properties: {
-          query: { type: 'string', description: 'Search keywords' },
-          limit: { type: 'number', description: 'Max results. Default 20.' },
-        },
-        required: ['query'],
-      },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'get_app_usage_stats',
-      description:
-        'Aggregate stats: which apps were used, activity count per app, total time, and active hours of day. Good starting point.',
-      parameters: {
-        type: 'object',
-        properties: {
-          days_back: { type: 'number', description: 'Days back. Default 7.' },
-        },
-      },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'get_daily_breakdown',
-      description:
-        'Activities grouped by date and hour. Shows what happened when — useful for finding time-based patterns and routines.',
-      parameters: {
-        type: 'object',
-        properties: {
-          days_back: { type: 'number', description: 'Days back. Default 7.' },
-          app_name: { type: 'string', description: 'Optional: filter by app' },
-        },
-      },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'get_activity_details',
-      description:
-        'Full details for specific activities by ID, including window titles and TLD. Use to drill into interesting activities.',
-      parameters: {
-        type: 'object',
-        properties: {
-          ids: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Activity IDs to fetch',
-          },
-        },
-        required: ['ids'],
-      },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'search_existing_patterns',
-      description:
-        'Search previously detected patterns by name or description. Use this before reporting a pattern to check if it already exists. If you find a match, include its ID as existing_pattern_id in your output.',
-      parameters: {
-        type: 'object',
-        properties: {
-          query: {
-            type: 'string',
-            description: 'Search keywords to match against pattern names and descriptions',
-          },
-        },
-        required: ['query'],
-      },
-    },
-  },
-]
-
-// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -190,151 +73,60 @@ function isSameDay(a: number, b: number): boolean {
   )
 }
 
-function uniformSample<T>(arr: T[], maxSize: number): T[] {
-  if (arr.length <= maxSize) return arr
-  const step = arr.length / maxSize
-  const result: T[] = []
-  for (let i = 0; i < maxSize; i++) {
-    result.push(arr[Math.floor(i * step)])
-  }
-  return result
+/** Midnight-to-midnight boundaries for a given day offset (0 = today, 1 = yesterday). */
+function getDayBoundaries(daysBack: number): { start: number; end: number; label: string } {
+  const now = new Date()
+  const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysBack)
+  const start = day.getTime()
+  const end = start + 24 * 60 * 60 * 1000 - 1
+  const label = day.toISOString().split('T')[0]
+  return { start, end, label }
 }
 
-function formatActivity(a: ActivitySummary) {
-  return {
+function serializeActivities(activities: ActivityDetail[]): object[] {
+  return activities.map((a) => ({
     id: a.id,
     time: new Date(a.startTimestamp).toISOString(),
     duration_min: Math.round((a.endTimestamp - a.startTimestamp) / 60000),
     app: a.appName,
+    window_title: a.windowTitle,
+    tld: a.tld,
     summary: a.summary,
-  }
+  }))
 }
 
-function executeLocalTool(
-  storage: StorageService,
-  name: string,
-  args: Record<string, unknown>,
-): unknown {
-  const now = Date.now()
-
-  switch (name) {
-    case 'get_activities': {
-      const daysBack = (args.days_back as number) || 7
-      const limit = (args.limit as number) || 50
-      const startTime = now - daysBack * 24 * 60 * 60 * 1000
-      const activities = storage.activities.getByTimeRange(startTime, now, {
-        appName: args.app_name as string | undefined,
-      })
-      return uniformSample(activities, limit).map(formatActivity)
-    }
-
-    case 'search_activities': {
-      const query = args.query as string
-      if (!query) return { error: 'query parameter is required' }
-      const limit = (args.limit as number) || 20
-      const results = storage.activities.searchFTS(query, limit)
-      return results.map(formatActivity)
-    }
-
-    case 'get_app_usage_stats': {
-      const daysBack = (args.days_back as number) || 7
-      const startTime = now - daysBack * 24 * 60 * 60 * 1000
-      const activities = storage.activities.getByTimeRange(startTime, now)
-
-      const stats: Record<
-        string,
-        { count: number; totalMinutes: number; hours: Set<number>; days: Set<string> }
-      > = {}
-      for (const a of activities) {
-        if (!stats[a.appName]) {
-          stats[a.appName] = { count: 0, totalMinutes: 0, hours: new Set(), days: new Set() }
-        }
-        stats[a.appName].count++
-        stats[a.appName].totalMinutes += (a.endTimestamp - a.startTimestamp) / 60000
-        stats[a.appName].hours.add(new Date(a.startTimestamp).getHours())
-        stats[a.appName].days.add(new Date(a.startTimestamp).toISOString().split('T')[0])
-      }
-
-      return Object.entries(stats)
-        .sort(([, a], [, b]) => b.count - a.count)
-        .map(([app, s]) => ({
-          app,
-          activity_count: s.count,
-          total_minutes: Math.round(s.totalMinutes),
-          active_hours: [...s.hours].sort((a, b) => a - b),
-          active_days: [...s.days].sort(),
-        }))
-    }
-
-    case 'get_daily_breakdown': {
-      const daysBack = (args.days_back as number) || 7
-      const startTime = now - daysBack * 24 * 60 * 60 * 1000
-      const activities = storage.activities.getByTimeRange(startTime, now, {
-        appName: args.app_name as string | undefined,
-      })
-
-      const byDay: Record<string, { app: string; hour: number; summary: string }[]> = {}
-      for (const a of activities) {
-        const date = new Date(a.startTimestamp)
-        const dayKey = date.toISOString().split('T')[0]
-        if (!byDay[dayKey]) byDay[dayKey] = []
-        byDay[dayKey].push({
-          app: a.appName,
-          hour: date.getHours(),
-          summary: a.summary,
-        })
-      }
-
-      return Object.entries(byDay)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([date, entries]) => ({
-          date,
-          activity_count: entries.length,
-          entries: uniformSample(entries, 30),
-        }))
-    }
-
-    case 'get_activity_details': {
-      const ids = args.ids as string[]
-      const activities = storage.activities.getByIds(ids)
-      return activities.map((a) => ({
-        id: a.id,
-        time: new Date(a.startTimestamp).toISOString(),
-        duration_min: Math.round((a.endTimestamp - a.startTimestamp) / 60000),
-        app: a.appName,
-        window_title: a.windowTitle,
-        tld: a.tld,
-        summary: a.summary,
-      }))
-    }
-
-    case 'search_existing_patterns': {
-      const query = args.query as string
-      if (!query) return { error: 'query parameter is required' }
-      const patterns = storage.patterns.searchPatterns(query)
-      return patterns.map((p) => ({
-        id: p.id,
-        name: p.name,
-        description: p.description,
-        apps: p.apps,
-        frequency: p.frequency,
-        sighting_count: p.sightingCount,
-      }))
-    }
-
-    default:
-      return { error: `Unknown tool: ${name}` }
-  }
+function serializeExistingPatterns(patterns: PatternWithStats[]): object[] {
+  return patterns.map((p) => ({
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    apps: p.apps,
+    frequency: p.frequency,
+    sighting_count: p.sightingCount,
+  }))
 }
 
 // ---------------------------------------------------------------------------
 // System prompt
 // ---------------------------------------------------------------------------
 
-function buildSystemPrompt(): string {
-  return `You are an automation analyst examining a user's computer activity history. Your job is to find work that is repetitive, manual, and could be automated away with a script, API call, or tool.
+function buildSystemPrompt(dateLabel: string, existingPatterns: PatternWithStats[]): string {
+  let patternsSection = ''
+  if (existingPatterns.length > 0) {
+    patternsSection = `
 
-You have tools to query the activity database. Use them iteratively — form hypotheses, test them, drill down.
+## Existing patterns (already detected)
+
+Below are patterns found in previous runs. If you see the same pattern again today, include its \`id\` as \`existing_pattern_id\` in your output instead of creating a duplicate.
+
+\`\`\`json
+${JSON.stringify(serializeExistingPatterns(existingPatterns), null, 2)}
+\`\`\``
+  }
+
+  return `You are an automation analyst examining a user's computer activity from ${dateLabel}. Your job is to find work that is repetitive, manual, and could be automated away with a script, API call, or tool.
+
+Below you will receive a complete list of activities for the day. Analyze them to find automatable patterns.
 
 ## What you're looking for
 
@@ -355,21 +147,11 @@ BAD finds (not useful, skip these):
 - Any pattern that doesn't have a clear automation opportunity
 
 The key question for each finding: "Could a script, cron job, API integration, or macro do this instead of the human?"
-
-## Checking for existing patterns
-
-Before reporting a pattern, use the search_existing_patterns tool to check if it's already known. If you find a match, include its ID in your output as existing_pattern_id. This avoids creating duplicates.
-
-## Approach
-1. Start with get_app_usage_stats to understand the landscape
-2. Use get_daily_breakdown to look for repetitive manual sequences
-3. Search for specific topics like "spreadsheet", "copy", "update", "check", "report", "fill"
-4. Drill into suspicious patterns with get_activity_details — window titles and URLs are crucial
-5. Look for the SAME sequence of apps/actions happening multiple times across different days
-6. Before finalizing, search_existing_patterns to deduplicate
+${patternsSection}
 
 ## Output
-When done exploring, output your findings as a JSON array:
+
+Output your findings as a JSON array:
 
 \`\`\`json
 [
@@ -380,14 +162,14 @@ When done exploring, output your findings as a JSON array:
     "frequency": "daily | multiple_times_daily | weekly | occasional",
     "automation_idea": "How this could be automated (specific: which API, what script, what tool)",
     "confidence": 0.0-1.0,
-    "evidence": "What data you saw that supports this — be specific about dates, window titles, summaries",
+    "evidence": "What data you saw that supports this — be specific about times, window titles, summaries",
     "existing_pattern_id": "optional — ID of an existing pattern if this is a re-sighting",
-    "activity_ids": ["optional — IDs of activities that demonstrate this pattern"]
+    "activity_ids": ["IDs of activities that demonstrate this pattern"]
   }
 ]
 \`\`\`
 
-Be very selective. Only report things where you genuinely see repeated manual work that a computer could do. 2-3 high-quality finds beats 10 vague ones.`
+Be very selective. Only report things where you genuinely see repeated manual work that a computer could do. 2-3 high-quality finds beats 10 vague ones. If there's nothing automatable, return an empty array \`[]\`.`
 }
 
 // ---------------------------------------------------------------------------
@@ -506,7 +288,7 @@ export class PatternDetector {
 }
 
 // ---------------------------------------------------------------------------
-// Core agentic loop (stateless)
+// Single-shot detection
 // ---------------------------------------------------------------------------
 
 async function runDetection(
@@ -526,98 +308,53 @@ async function runDetection(
 
   progress(`Starting run ${runId} (model=${cfg.model}, lookback=${cfg.lookbackDays}d)`)
 
+  // 1. Query activities for the target day(s)
+  const { start, end, label } = getDayBoundaries(cfg.lookbackDays)
+  const activities = storage.activities.getForDay(start, end)
+  progress(`Found ${activities.length} activities for ${label}`)
+
+  if (activities.length === 0) {
+    progress('No activities for this day, skipping')
+    return {
+      runId,
+      newPatterns: 0,
+      updatedPatterns: 0,
+      totalFindings: 0,
+      tokenUsage: { input: 0, output: 0 },
+    }
+  }
+
+  // 2. Serialize activities
+  const serialized = serializeActivities(activities)
+
+  // 3. Load existing patterns for dedup context
+  const existingPatterns = storage.patterns.getActivePatterns()
+  progress(`Loaded ${existingPatterns.length} existing patterns for dedup`)
+
+  // 4. Build prompt and make single LLM call
+  const systemPrompt = buildSystemPrompt(label, existingPatterns)
+  const userMessage = `Here are all ${activities.length} activities from ${label}:\n\n\`\`\`json\n${JSON.stringify(serialized, null, 2)}\n\`\`\``
+
   const client = new OpenRouter({ apiKey })
 
-  type Message =
-    | { role: 'system'; content: string }
-    | { role: 'user'; content: string }
-    | {
-        role: 'assistant'
-        content?: string | null
-        toolCalls?: {
-          id: string
-          type: 'function'
-          function: { name: string; arguments: string }
-        }[]
-      }
-    | { role: 'tool'; content: string; toolCallId: string }
+  progress(`Sending ${activities.length} activities to ${cfg.model}...`)
+  const response = await client.chat.send({
+    model: cfg.model,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userMessage },
+    ],
+  })
 
-  const timeframe = cfg.lookbackDays === 1 ? 'yesterday' : `the last ${cfg.lookbackDays} days`
+  const choice = response.choices?.[0]
+  const content = typeof choice?.message?.content === 'string' ? choice.message.content : ''
 
-  const messages: Message[] = [
-    { role: 'system', content: buildSystemPrompt() },
-    {
-      role: 'user',
-      content: `Analyze my activity history from ${timeframe} and find recurring patterns. Start exploring.`,
-    },
-  ]
+  const totalInputTokens = response.usage?.promptTokens || 0
+  const totalOutputTokens = response.usage?.completionTokens || 0
+  progress(`Response received (${totalInputTokens} in / ${totalOutputTokens} out tokens)`)
 
-  let totalInputTokens = 0
-  let totalOutputTokens = 0
-  let finalContent = ''
-
-  for (let i = 0; i < cfg.maxIterations; i++) {
-    progress(`Iteration ${i + 1}/${cfg.maxIterations}`)
-
-    const response = await client.chat.send({
-      model: cfg.model,
-      messages,
-      tools: TOOLS,
-      toolChoice: 'auto',
-    })
-
-    const choice = response.choices?.[0]
-    const msg = choice?.message
-    if (!msg) throw new Error('No message in response')
-
-    if (response.usage) {
-      totalInputTokens += response.usage.promptTokens || 0
-      totalOutputTokens += response.usage.completionTokens || 0
-    }
-
-    const content = typeof msg.content === 'string' ? msg.content : null
-    messages.push({
-      role: 'assistant',
-      content,
-      toolCalls: msg.toolCalls,
-    })
-
-    if (!msg.toolCalls?.length) {
-      finalContent = content || ''
-      progress(`Completed after ${i + 1} iterations`)
-      break
-    }
-
-    for (const toolCall of msg.toolCalls) {
-      const { name, arguments: argsStr } = toolCall.function
-      let args: Record<string, unknown>
-      try {
-        args = JSON.parse(argsStr)
-      } catch {
-        args = {}
-      }
-
-      progress(`Tool: ${name}(${JSON.stringify(args).substring(0, 100)})`)
-
-      const result = executeLocalTool(storage, name, args)
-      const resultStr = JSON.stringify(result, null, 2)
-
-      messages.push({
-        role: 'tool',
-        toolCallId: toolCall.id,
-        content: resultStr,
-      })
-    }
-  }
-
-  if (!finalContent) {
-    const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
-    finalContent =
-      (lastAssistant && 'content' in lastAssistant ? lastAssistant.content : null) || ''
-  }
-
-  // Parse findings and persist
-  const findings = extractFindingsFromResponse(finalContent)
+  // 5. Parse findings and persist
+  const findings = extractFindingsFromResponse(content)
   let newPatterns = 0
   let updatedPatterns = 0
 

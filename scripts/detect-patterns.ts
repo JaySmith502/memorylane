@@ -5,7 +5,7 @@
  * Usage:
  *   npm run detect-patterns
  *   npm run detect-patterns -- --model google/gemini-2.5-flash-preview
- *   npm run detect-patterns -- --model anthropic/claude-sonnet-4 --days 14
+ *   npm run detect-patterns -- --days 2  (analyze 2 days ago instead of yesterday)
  */
 
 import { config as loadEnv } from 'dotenv'
@@ -15,6 +15,7 @@ import * as fs from 'fs'
 import { StorageService } from '../src/main/storage/index'
 import { getDefaultDbPath } from '../src/main/paths'
 import { PatternDetector } from '../src/main/services/pattern-detector'
+import { PATTERN_DETECTION_CONFIG } from '../src/shared/constants'
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -25,7 +26,7 @@ function parseArgs() {
   let dbPath = getDefaultDbPath()
   let model = 'anthropic/claude-sonnet-4'
   let apiKey = process.env.OPENROUTER_API_KEY || ''
-  let days = 7
+  let days = PATTERN_DETECTION_CONFIG.LOOKBACK_DAYS
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--db-path' && args[i + 1]) {

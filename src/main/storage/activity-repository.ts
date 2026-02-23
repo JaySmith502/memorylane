@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3'
 import type { SearchFilters } from '../../shared/types'
-import type { StoredActivity, ActivitySummary } from './types'
+import type { StoredActivity, ActivitySummary, ActivityDetail } from './types'
 import { vectorToBlob, blobToVector, sanitizeFtsQuery, SQLITE_VEC_KNN_MAX } from './utils'
 import log from '../logger'
 
@@ -173,6 +173,23 @@ export class ActivityRepository {
     return rows.map((row) => this.rowToStored(row))
   }
 
+  /**
+   * Get all activities for a calendar day with window context (windowTitle, tld).
+   * Excludes heavy ocrText and vector fields.
+   */
+  getForDay(dayStart: number, dayEnd: number): ActivityDetail[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, start_timestamp, end_timestamp, app_name, window_title, tld, summary
+       FROM activities
+       WHERE end_timestamp >= ? AND start_timestamp <= ?
+       ORDER BY start_timestamp ASC`,
+      )
+      .all(dayStart, dayEnd) as Record<string, unknown>[]
+
+    return rows.map((row) => this.rowToDetail(row))
+  }
+
   count(): number {
     return this.getRowCount()
   }
@@ -205,6 +222,18 @@ export class ActivityRepository {
       startTimestamp: row.start_timestamp as number,
       endTimestamp: row.end_timestamp as number,
       appName: row.app_name as string,
+      summary: row.summary as string,
+    }
+  }
+
+  private rowToDetail(row: Record<string, unknown>): ActivityDetail {
+    return {
+      id: row.id as string,
+      startTimestamp: row.start_timestamp as number,
+      endTimestamp: row.end_timestamp as number,
+      appName: row.app_name as string,
+      windowTitle: row.window_title as string,
+      tld: (row.tld as string) ?? null,
       summary: row.summary as string,
     }
   }
