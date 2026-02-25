@@ -1,0 +1,18 @@
+{
+  "name": "deusXmachina-dev-marketplace",
+  "owner": {
+    "name": "deusXmachina-dev"
+  },
+  "plugins": [
+    {
+      "name": "MemoryLane",
+      "description": "Search and reason over your screen activity history — what you worked on, when, and in which apps.",
+      "author": {
+        "name": "MemoryLane Team"
+      },
+      "source": "./plugins/memorylane",
+      "category": "productivity",
+      "homepage": "https://trymemorylane.com"
+    }
+  ]
+}
