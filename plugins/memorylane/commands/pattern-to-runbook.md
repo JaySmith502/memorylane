@@ -3,7 +3,7 @@ allowed-tools: mcp__memorylane__browse_timeline, mcp__memorylane__search_context
 description: Generate an automation runbook from a workflow pattern
 ---
 
-# Create Runbook
+# Pattern to Runbook
 
 Generate a step-by-step automation runbook (`.md` file) from a workflow pattern. The pattern can come from a previous `/discover-patterns` session or be described directly by the user. The runbook follows the methodology defined in `skills/runbook-creator/SKILL.md`.
 
@@ -54,7 +54,7 @@ After saving, show:
 
 - The file path where the runbook was saved
 - A brief summary of what the runbook covers (pattern name, number of steps, key apps)
-- Suggested next steps: review the runbook, start building the automation, or run `/create-runbook` again for another pattern
+- Suggested next steps: review the runbook, start building the automation, or run `/pattern-to-runbook` again for another pattern
 
 ## Notes
 

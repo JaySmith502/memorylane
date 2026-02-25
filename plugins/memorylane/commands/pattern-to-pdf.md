@@ -3,13 +3,13 @@ allowed-tools: mcp__memorylane__browse_timeline, mcp__memorylane__search_context
 description: Generate a process description document as a downloadable PDF from a detected pattern
 ---
 
-# Process to PDF
+# Pattern to PDF
 
 Generate a shareable process briefing from a detected pattern or user-described workflow — a visual process map, step-by-step walkthrough, occurrence stats, and improvement opportunities. Output is a downloadable PDF.
 
 ## Instructions
 
-The full methodology, document structure, process map design, and HTML template live in `skills/process-to-pdf/SKILL.md`. This command orchestrates the workflow.
+The full methodology, document structure, process map design, and HTML template live in `skills/pattern-to-pdf/SKILL.md`. This command orchestrates the workflow.
 
 ### Step 1 — Identify the Process
 
@@ -129,7 +129,7 @@ If Chrome is not installed, fall back to saving as `<slug>-pdd.html` and tell th
 
 ## Notes
 
-- **Don't duplicate** — the document structure, process map design, and HTML template live in `skills/process-to-pdf/SKILL.md`. Always reference that file.
+- **Don't duplicate** — the document structure, process map design, and HTML template live in `skills/pattern-to-pdf/SKILL.md`. Always reference that file.
 - **Minimum data threshold** — need at least 2 clear instances to produce a document. Below that, tell the user.
 - **Privacy** — summaries are the primary data source. Only use `get_activity_details` for the deep-dive step. Never reproduce raw OCR in the output.
 - **Scope** — one document per process. If the user wants multiple processes documented, run this command once per process.

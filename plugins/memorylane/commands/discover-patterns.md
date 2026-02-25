@@ -302,20 +302,12 @@ After saving the HTML report, use the `AskUserQuestion` tool to present two inte
       "header": "Next step",
       "options": [
         {
-          "label": "Generate PDD",
-          "description": "Create a process description document as PDF — via /process-to-pdf"
+          "label": "Pattern to PDF",
+          "description": "Create a process description document as PDF — via /pattern-to-pdf"
         },
         {
-          "label": "Create runbook",
-          "description": "Create an automation runbook — via /create-runbook"
-        },
-        {
-          "label": "Both",
-          "description": "Generate both a PDD and an automation runbook"
-        },
-        {
-          "label": "Nothing for now",
-          "description": "Skip — I'll come back to this later"
+          "label": "Pattern to runbook",
+          "description": "Create an automation runbook — via /pattern-to-runbook"
         }
       ],
       "multiSelect": true

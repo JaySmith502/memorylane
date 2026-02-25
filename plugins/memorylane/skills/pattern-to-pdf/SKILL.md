@@ -1,5 +1,5 @@
 ---
-name: process-to-pdf
+name: pattern-to-pdf
 description: Process Description Document generator. Takes a detected pattern or user-described process and produces a downloadable PDF briefing with a visual process map, step details, occurrence stats, and improvement opportunities. Requires MemoryLane MCP tools.
 ---
 
