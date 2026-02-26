@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { captureDesktop } from './native-screenshot'
+import { ScreenshotDaemon } from './native-screenshot'
 
 const RUN_INTEGRATION =
   process.platform === 'darwin' && process.env.RUN_NATIVE_SCREENSHOT_INTEGRATION === '1'
@@ -11,17 +11,19 @@ const SCREENSHOT_BINARY_PATH = path.resolve(process.cwd(), 'build', 'swift', 'sc
 const OUTPUT_ROOT_DIR = path.resolve(process.cwd(), '.debug-native-screenshot')
 const RUN_OUTPUT_DIR = path.join(OUTPUT_ROOT_DIR, new Date().toISOString().replace(/[:.]/g, '-'))
 
-const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+const JPEG_SIGNATURE = Buffer.from([0xff, 0xd8, 0xff])
 
-function assertPng(pathname: string): void {
+function assertJpeg(pathname: string): void {
   expect(fs.existsSync(pathname)).toBe(true)
   const bytes = fs.readFileSync(pathname)
-  expect(bytes.length).toBeGreaterThan(PNG_SIGNATURE.length)
-  expect(bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)).toBe(true)
+  expect(bytes.length).toBeGreaterThan(JPEG_SIGNATURE.length)
+  expect(bytes.subarray(0, JPEG_SIGNATURE.length).equals(JPEG_SIGNATURE)).toBe(true)
 }
 
-describeIntegration('native screenshot integration', () => {
-  beforeAll(() => {
+describeIntegration('native screenshot daemon integration', () => {
+  let daemon: ScreenshotDaemon
+
+  beforeAll(async () => {
     if (!fs.existsSync(SCREENSHOT_BINARY_PATH)) {
       throw new Error(
         `Missing screenshot binary at ${SCREENSHOT_BINARY_PATH}. Run "npm run build:swift" first.`,
@@ -29,29 +31,33 @@ describeIntegration('native screenshot integration', () => {
     }
 
     fs.mkdirSync(RUN_OUTPUT_DIR, { recursive: true })
+
+    daemon = new ScreenshotDaemon()
+    await daemon.start()
   })
 
-  afterAll(() => {
+  afterAll(async () => {
+    await daemon.stop()
     delete process.env.MEMORYLANE_SCREENSHOT_EXECUTABLE
   })
 
-  it('captures a real desktop screenshot using default executable resolution', async () => {
-    const outputPath = path.join(RUN_OUTPUT_DIR, 'desktop.png')
-    const result = await captureDesktop({ outputPath })
+  it('captures a real desktop screenshot via daemon', async () => {
+    const outputPath = path.join(RUN_OUTPUT_DIR, 'desktop.jpg')
+    const result = await daemon.capture({ outputPath })
 
     expect(result.filepath).toBe(outputPath)
     expect(result.width).toBeGreaterThan(0)
     expect(result.height).toBeGreaterThan(0)
-    assertPng(outputPath)
+    assertJpeg(outputPath)
   })
 
   it('captures a screenshot for an explicitly requested display id', async () => {
-    const baselinePath = path.join(RUN_OUTPUT_DIR, 'baseline-display.png')
-    const baselineCapture = await captureDesktop({ outputPath: baselinePath })
-    assertPng(baselinePath)
+    const baselinePath = path.join(RUN_OUTPUT_DIR, 'baseline-display.jpg')
+    const baselineCapture = await daemon.capture({ outputPath: baselinePath })
+    assertJpeg(baselinePath)
 
-    const explicitOutputPath = path.join(RUN_OUTPUT_DIR, 'explicit-display.png')
-    const explicitCapture = await captureDesktop({
+    const explicitOutputPath = path.join(RUN_OUTPUT_DIR, 'explicit-display.jpg')
+    const explicitCapture = await daemon.capture({
       outputPath: explicitOutputPath,
       displayId: baselineCapture.displayId,
     })
@@ -60,23 +66,23 @@ describeIntegration('native screenshot integration', () => {
     expect(explicitCapture.displayId).toBe(baselineCapture.displayId)
     expect(explicitCapture.width).toBeGreaterThan(0)
     expect(explicitCapture.height).toBeGreaterThan(0)
-    assertPng(explicitOutputPath)
+    assertJpeg(explicitOutputPath)
   })
 
   it('respects max dimension when requested', async () => {
-    const outputPath = path.join(RUN_OUTPUT_DIR, 'max-dimension.png')
-    const result = await captureDesktop({ outputPath, maxDimensionPx: 1920 })
+    const outputPath = path.join(RUN_OUTPUT_DIR, 'max-dimension.jpg')
+    const result = await daemon.capture({ outputPath, maxDimensionPx: 1920 })
 
     expect(result.filepath).toBe(outputPath)
     expect(result.width).toBeGreaterThan(0)
     expect(result.height).toBeGreaterThan(0)
     expect(Math.max(result.width, result.height)).toBeLessThanOrEqual(1920)
-    assertPng(outputPath)
+    assertJpeg(outputPath)
   })
 
   it('prints where screenshots were saved for manual inspection', () => {
-    expect(fs.existsSync(path.join(RUN_OUTPUT_DIR, 'desktop.png'))).toBe(true)
-    expect(fs.existsSync(path.join(RUN_OUTPUT_DIR, 'explicit-display.png'))).toBe(true)
+    expect(fs.existsSync(path.join(RUN_OUTPUT_DIR, 'desktop.jpg'))).toBe(true)
+    expect(fs.existsSync(path.join(RUN_OUTPUT_DIR, 'explicit-display.jpg'))).toBe(true)
     console.log(`[NativeScreenshotIntegration] Saved captures in: ${RUN_OUTPUT_DIR}`)
   })
 })

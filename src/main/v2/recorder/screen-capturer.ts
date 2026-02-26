@@ -1,7 +1,7 @@
 import * as path from 'path'
 import log from '../../logger'
 import { SCREEN_CAPTURER_CONFIG } from '@constants'
-import { captureDesktop } from './native-screenshot'
+import { createScreenCaptureBackend, type ScreenCaptureBackend } from './native-screenshot'
 import type { DurableStream } from '../streams/stream'
 
 const MAX_TRANSIENT_CAPTURE_FAILURES = 20
@@ -29,6 +29,7 @@ export class ScreenCapturer {
   private displayId: number | undefined
   private readonly maxDimensionPx: number | undefined
   private readonly stream: DurableStream<Frame>
+  private readonly backend: ScreenCaptureBackend
   private _capturing = false
   private timer: ReturnType<typeof setTimeout> | null = null
   private _sequenceNumber = 0
@@ -40,6 +41,7 @@ export class ScreenCapturer {
     this.displayId = config.displayId
     this.maxDimensionPx = config.maxDimensionPx ?? SCREEN_CAPTURER_CONFIG.MAX_DIMENSION_PX
     this.stream = config.stream
+    this.backend = createScreenCaptureBackend()
   }
 
   get capturing(): boolean {
@@ -50,18 +52,20 @@ export class ScreenCapturer {
     this.displayId = displayId
   }
 
-  start(): void {
+  async start(): Promise<void> {
     if (this._capturing) return
     this._capturing = true
+    await this.backend.start()
     this.tick()
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     this._capturing = false
     if (this.timer !== null) {
       clearTimeout(this.timer)
       this.timer = null
     }
+    await this.backend.stop()
   }
 
   private tick(): void {
@@ -86,7 +90,7 @@ export class ScreenCapturer {
 
   private async captureFrame(): Promise<void> {
     const seq = this._sequenceNumber++
-    const outputPath = path.join(this.outputDir, `frame-${seq}.png`)
+    const outputPath = path.join(this.outputDir, `frame-${seq}.jpg`)
     const timestamp = Date.now()
 
     const result = await this.captureDesktopWithTolerance(outputPath)
@@ -110,7 +114,7 @@ export class ScreenCapturer {
       failedAttempts += 1
     ) {
       try {
-        return await captureDesktop({
+        return await this.backend.capture({
           outputPath,
           displayId: this.displayId,
           maxDimensionPx: this.maxDimensionPx,

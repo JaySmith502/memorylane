@@ -218,6 +218,8 @@ export class FfmpegVideoStitcher implements ActivityVideoStitcher {
         FFMPEG_VIDEO_PRESET,
         '-crf',
         FFMPEG_VIDEO_CRF,
+        '-threads',
+        '2',
         '-vf',
         'scale=trunc(iw/2)*2:trunc(ih/2)*2',
         '-pix_fmt',

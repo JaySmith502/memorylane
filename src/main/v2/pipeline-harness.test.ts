@@ -14,19 +14,25 @@ vi.mock('../logger', () => ({
   },
 }))
 
-const { mockedCaptureDesktop } = vi.hoisted(() => ({
-  mockedCaptureDesktop: vi.fn(
+const { mockedCapture } = vi.hoisted(() => {
+  const mockedCapture = vi.fn(
     async ({ outputPath, displayId }: { outputPath: string; displayId?: number }) => ({
       filepath: outputPath,
       width: 1280,
       height: 720,
       displayId: displayId ?? 1,
     }),
-  ),
-}))
+  )
+
+  return { mockedCapture }
+})
 
 vi.mock('./recorder/native-screenshot', () => ({
-  captureDesktop: mockedCaptureDesktop,
+  createScreenCaptureBackend: () => ({
+    start: vi.fn().mockResolvedValue(undefined),
+    stop: vi.fn().mockResolvedValue(undefined),
+    capture: mockedCapture,
+  }),
 }))
 
 function sleep(ms: number): Promise<void> {
@@ -50,7 +56,7 @@ describe('v2 pipeline harness', () => {
   const subscriptions: StreamSubscription[] = []
 
   afterEach(() => {
-    mockedCaptureDesktop.mockClear()
+    mockedCapture.mockClear()
     for (const sub of subscriptions.splice(0)) {
       sub.unsubscribe()
     }
@@ -137,10 +143,10 @@ describe('v2 pipeline harness', () => {
 
     await waitFor(
       () =>
-        mockedCaptureDesktop.mock.calls.some(
+        mockedCapture.mock.calls.some(
           (call) => (call[0] as { displayId?: number } | undefined)?.displayId === 2,
         ),
-      'Expected captureDesktop to receive displayId=2 after app_change',
+      'Expected daemon capture to receive displayId=2 after app_change',
     )
 
     await harness.stop()

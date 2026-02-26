@@ -90,7 +90,7 @@ export function createV2PipelineHarness(params: {
       if (activityExtractor) {
         await activityExtractor.start()
       }
-      screenCapturer.start()
+      await screenCapturer.start()
 
       cleanupTimer = setInterval(() => {
         sweepStaleFiles(params.outputDir)
@@ -101,7 +101,7 @@ export function createV2PipelineHarness(params: {
         clearInterval(cleanupTimer)
         cleanupTimer = null
       }
-      screenCapturer.stop()
+      await screenCapturer.stop()
       await eventCapturer.flushAndWait()
       await activityProducer.stop()
       if (activityExtractor) {
