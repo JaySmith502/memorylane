@@ -7,10 +7,9 @@ describe('ScreenshotDaemon', () => {
     expect(typeof ScreenshotDaemon).toBe('function')
   })
 
-  it('throws when capturing before start', async () => {
+  it('send is a no-op before start', () => {
     const daemon = new ScreenshotDaemon()
-    await expect(daemon.capture({ outputPath: '/tmp/test.jpg' })).rejects.toThrow(
-      '[ScreenshotDaemon] Not started',
-    )
+    // Should not throw — just logs a warning
+    daemon.send({ displayId: 1 })
   })
 })

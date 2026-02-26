@@ -29,7 +29,6 @@ export interface V2PipelineHarness {
 export function createV2PipelineHarness(params: {
   outputDir: string
   frameIntervalMs?: number
-  displayId?: number
   activityProducerConfig?: Partial<V2ActivityProducerConfig>
   activityExtractorConfig?: Partial<V2ActivityExtractorConfig>
   extractorTransformer?: ActivityTransformer
@@ -42,7 +41,6 @@ export function createV2PipelineHarness(params: {
   const screenCapturer = new ScreenCapturer({
     intervalMs: params.frameIntervalMs,
     outputDir: params.outputDir,
-    displayId: params.displayId,
     stream: frameStream,
   })
   const eventCapturer = new EventCapturer(eventStream)

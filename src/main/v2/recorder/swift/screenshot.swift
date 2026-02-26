@@ -28,19 +28,64 @@ func fail(_ message: String, exitCode: Int32 = 1) -> Never {
     exit(exitCode)
 }
 
-func ensureOutputDirectory(for outputPath: String) throws {
-    let outputURL = URL(fileURLWithPath: outputPath)
-    let directoryURL = outputURL.deletingLastPathComponent()
-    try FileManager.default.createDirectory(
-        at: directoryURL,
-        withIntermediateDirectories: true
+// MARK: - CLI Argument Parsing
+
+struct DaemonConfig {
+    var outputDir: String
+    var intervalMs: Int
+    var maxDimension: Int?
+    var format: String
+    var quality: Int
+}
+
+func parseArgs() -> DaemonConfig {
+    let args = CommandLine.arguments
+    var outputDir: String? = nil
+    var intervalMs = 1000
+    var maxDimension: Int? = nil
+    var format = "jpeg"
+    var quality = 80
+
+    var i = 1
+    while i < args.count {
+        switch args[i] {
+        case "--outputDir":
+            i += 1; guard i < args.count else { fail("Missing value for --outputDir") }
+            outputDir = args[i]
+        case "--intervalMs":
+            i += 1; guard i < args.count, let v = Int(args[i]) else { fail("Invalid --intervalMs") }
+            intervalMs = v
+        case "--maxDimension":
+            i += 1; guard i < args.count, let v = Int(args[i]) else { fail("Invalid --maxDimension") }
+            maxDimension = v
+        case "--format":
+            i += 1; guard i < args.count else { fail("Missing value for --format") }
+            format = args[i]
+        case "--quality":
+            i += 1; guard i < args.count, let v = Int(args[i]) else { fail("Invalid --quality") }
+            quality = v
+        default:
+            fail("Unknown argument: \(args[i])")
+        }
+        i += 1
+    }
+
+    guard let dir = outputDir else {
+        fail("--outputDir is required")
+    }
+
+    return DaemonConfig(
+        outputDir: dir,
+        intervalMs: intervalMs,
+        maxDimension: maxDimension,
+        format: format,
+        quality: quality
     )
 }
 
 // MARK: - Image Writing
 
 func writeImage(_ image: CGImage, to outputPath: String, format: String, quality: Int) throws {
-    try ensureOutputDirectory(for: outputPath)
     let outputURL = URL(fileURLWithPath: outputPath)
 
     let utType: UTType
@@ -144,85 +189,52 @@ func resolveDisplayId(_ requestedDisplayId: UInt32?) throws -> CGDirectDisplayID
     return displays[0]
 }
 
-// MARK: - ScreenCaptureKit Daemon
+// MARK: - Autonomous ScreenCaptureKit Daemon
 
-actor FrameCache {
-    private var latestImage: CGImage? = nil
-
-    func update(_ image: CGImage) {
-        latestImage = image
-    }
-
-    func get() -> CGImage? {
-        return latestImage
-    }
-
-    func clear() {
-        latestImage = nil
-    }
-}
-
-class StreamOutputDelegate: NSObject, SCStreamOutput {
-    let frameCache: FrameCache
-
-    init(frameCache: FrameCache) {
-        self.frameCache = frameCache
-    }
-
-    func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
-        guard type == .screen else { return }
-        guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-
-        let ciImage = CIImage(cvImageBuffer: imageBuffer)
-        let context = CIContext()
-        let width = CVPixelBufferGetWidth(imageBuffer)
-        let height = CVPixelBufferGetHeight(imageBuffer)
-        guard let cgImage = context.createCGImage(ciImage, from: CGRect(x: 0, y: 0, width: width, height: height)) else {
-            return
-        }
-
-        Task {
-            await frameCache.update(cgImage)
-        }
-    }
-}
-
-class DaemonCapture {
-    let frameCache = FrameCache()
+class AutonomousCapture: NSObject, SCStreamOutput {
     private var stream: SCStream? = nil
-    private var outputDelegate: StreamOutputDelegate? = nil
     private var currentDisplayId: CGDirectDisplayID? = nil
+    private var config: DaemonConfig
+    private let ciContext = CIContext()
+    private let writeQueue = DispatchQueue(label: "com.memorylane.screenshot.write")
+    private var frameCounter: UInt64 = 0
 
-    func ensureStream(displayId: CGDirectDisplayID) async throws {
-        if currentDisplayId == displayId && stream != nil {
-            return
-        }
+    init(config: DaemonConfig) {
+        self.config = config
+    }
 
-        // Tear down existing stream
+    func startStream(displayId: CGDirectDisplayID? = nil) async throws {
         await stopStream()
 
+        let resolvedDisplayId = try resolveDisplayId(displayId)
         let content = try await SCShareableContent.current
-        guard let display = content.displays.first(where: { $0.displayID == displayId }) else {
-            throw ScreenshotError.displayNotFound(displayId)
+        guard let display = content.displays.first(where: { $0.displayID == resolvedDisplayId }) else {
+            throw ScreenshotError.displayNotFound(resolvedDisplayId)
         }
 
         let filter = SCContentFilter(display: display, excludingWindows: [])
 
-        let config = SCStreamConfiguration()
-        config.width = display.width * 2 // Retina
-        config.height = display.height * 2
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 1) // 1 fps
-        config.showsCursor = false
-        config.pixelFormat = kCVPixelFormatType_32BGRA
+        let streamConfig = SCStreamConfiguration()
+        streamConfig.width = display.width * 2 // Retina
+        streamConfig.height = display.height * 2
+        streamConfig.minimumFrameInterval = CMTime(
+            value: CMTimeValue(config.intervalMs),
+            timescale: 1000
+        )
+        streamConfig.showsCursor = false
+        streamConfig.pixelFormat = kCVPixelFormatType_32BGRA
 
-        let newStream = SCStream(filter: filter, configuration: config, delegate: nil)
-        let delegate = StreamOutputDelegate(frameCache: frameCache)
-        try newStream.addStreamOutput(delegate, type: .screen, sampleHandlerQueue: DispatchQueue(label: "com.memorylane.screenshot.daemon"))
+        let newStream = SCStream(filter: filter, configuration: streamConfig, delegate: nil)
+        try newStream.addStreamOutput(
+            self,
+            type: .screen,
+            sampleHandlerQueue: DispatchQueue(label: "com.memorylane.screenshot.capture")
+        )
         try await newStream.startCapture()
 
         self.stream = newStream
-        self.outputDelegate = delegate
-        self.currentDisplayId = displayId
+        self.currentDisplayId = resolvedDisplayId
+        fputs("[daemon] Stream started for display \(resolvedDisplayId) at \(config.intervalMs)ms interval\n", stderr)
     }
 
     func stopStream() async {
@@ -230,92 +242,130 @@ class DaemonCapture {
             try? await stream.stopCapture()
         }
         self.stream = nil
-        self.outputDelegate = nil
         self.currentDisplayId = nil
-        await frameCache.clear()
     }
 
-    func captureFrame(
-        outputPath: String,
-        displayId: CGDirectDisplayID,
-        maxDimension: Int?,
-        format: String,
-        quality: Int
-    ) async throws -> [String: Any] {
-        try await ensureStream(displayId: displayId)
-
-        // Wait briefly for a frame if cache is empty (first capture after stream start)
-        var image: CGImage? = await frameCache.get()
-        if image == nil {
-            for _ in 0..<20 {
-                try await Task.sleep(nanoseconds: 100_000_000) // 100ms
-                image = await frameCache.get()
-                if image != nil { break }
+    func updateIntervalMs(_ ms: Int) async {
+        config.intervalMs = ms
+        // Must recreate stream to change minimumFrameInterval
+        if let displayId = currentDisplayId {
+            do {
+                try await startStream(displayId: displayId)
+            } catch {
+                fputs("[daemon] Failed to restart stream with new interval: \(error)\n", stderr)
             }
         }
+    }
 
-        guard let capturedImage = image else {
-            throw ScreenshotError.captureFailed("No frame available from ScreenCaptureKit stream after 2s")
+    func updateDisplayId(_ displayId: UInt32?) async {
+        do {
+            try await startStream(displayId: displayId)
+        } catch {
+            fputs("[daemon] Failed to switch display: \(error)\n", stderr)
+        }
+    }
+
+    // SCStreamOutput callback — called on each frame from ScreenCaptureKit
+    func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
+        guard type == .screen else { return }
+        guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+
+        let ciImage = CIImage(cvImageBuffer: imageBuffer)
+        let width = CVPixelBufferGetWidth(imageBuffer)
+        let height = CVPixelBufferGetHeight(imageBuffer)
+        guard let cgImage = ciContext.createCGImage(ciImage, from: CGRect(x: 0, y: 0, width: width, height: height)) else {
+            return
         }
 
-        let resized = try resizeIfNeeded(capturedImage, maxDimension: maxDimension)
-        try writeImage(resized, to: outputPath, format: format, quality: quality)
+        let displayId = self.currentDisplayId ?? CGMainDisplayID()
+        let maxDimension = self.config.maxDimension
+        let format = self.config.format
+        let quality = self.config.quality
+        let outputDir = self.config.outputDir
 
-        return [
-            "status": "ok",
-            "filepath": outputPath,
-            "width": resized.width,
-            "height": resized.height,
-            "displayId": Int(displayId),
-        ]
+        writeQueue.async {
+            let timestamp = Int(Date().timeIntervalSince1970 * 1000)
+            let filename = "frame-\(timestamp).jpg"
+            let filepath = (outputDir as NSString).appendingPathComponent(filename)
+
+            do {
+                let resized = try resizeIfNeeded(cgImage, maxDimension: maxDimension)
+                try writeImage(resized, to: filepath, format: format, quality: quality)
+
+                let payload: [String: Any] = [
+                    "filepath": filepath,
+                    "timestamp": timestamp,
+                    "width": resized.width,
+                    "height": resized.height,
+                    "displayId": Int(displayId),
+                ]
+                emitJSON(payload)
+            } catch {
+                fputs("[daemon] Frame write failed: \(error)\n", stderr)
+            }
+        }
     }
 }
 
-func runDaemon() async {
-    let daemon = DaemonCapture()
+// MARK: - Stdin command listener
 
-    while let lineData = readLine(strippingNewline: true) {
-        // Parse JSON command from stdin
-        guard let data = lineData.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            emitJSON(["status": "error", "error": "Invalid JSON input"])
-            continue
+func listenForCommands(capture: AutonomousCapture) {
+    DispatchQueue.global(qos: .utility).async {
+        while let line = readLine(strippingNewline: true) {
+            guard let data = line.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                fputs("[daemon] Invalid JSON on stdin: \(line)\n", stderr)
+                continue
+            }
+
+            let newDisplayId = json["displayId"]
+            let newIntervalMs = json["intervalMs"] as? Int
+
+            Task {
+                if let newIntervalMs {
+                    await capture.updateIntervalMs(newIntervalMs)
+                }
+
+                if newDisplayId is NSNull {
+                    // null = reset to main display
+                    await capture.updateDisplayId(nil)
+                } else if let id = newDisplayId as? UInt32 {
+                    await capture.updateDisplayId(id)
+                } else if let id = newDisplayId as? Int {
+                    await capture.updateDisplayId(UInt32(id))
+                }
+            }
         }
 
-        guard let outputPath = json["output"] as? String, !outputPath.isEmpty else {
-            emitJSON(["status": "error", "error": "Missing required 'output' field"])
-            continue
-        }
-
-        let requestedDisplayId = json["displayId"] as? UInt32
-        let maxDimension = json["maxDimension"] as? Int
-        let format = (json["format"] as? String) ?? "jpeg"
-        let quality = (json["quality"] as? Int) ?? 80
-
-        do {
-            let displayId = try resolveDisplayId(requestedDisplayId)
-            let result = try await daemon.captureFrame(
-                outputPath: outputPath,
-                displayId: displayId,
-                maxDimension: maxDimension,
-                format: format,
-                quality: quality
-            )
-            emitJSON(result)
-        } catch {
-            emitJSON(["status": "error", "error": "\(error)"])
+        // stdin closed — clean shutdown
+        Task {
+            await capture.stopStream()
+            exit(0)
         }
     }
-
-    // stdin closed — shut down cleanly
-    await daemon.stopStream()
 }
 
 // MARK: - Entry point
 
+let config = parseArgs()
+
+// Ensure output directory exists
+try FileManager.default.createDirectory(
+    atPath: config.outputDir,
+    withIntermediateDirectories: true
+)
+
+let capture = AutonomousCapture(config: config)
+
 let semaphore = DispatchSemaphore(value: 0)
 Task {
-    await runDaemon()
-    semaphore.signal()
+    do {
+        try await capture.startStream()
+    } catch {
+        fail("Failed to start capture stream: \(error)")
+    }
+
+    // Start listening for stdin commands
+    listenForCommands(capture: capture)
 }
 semaphore.wait()

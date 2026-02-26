@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { ScreenshotDaemon } from './native-screenshot'
+import { ScreenshotDaemon, type CapturedFrame } from './native-screenshot'
 
 const RUN_INTEGRATION =
   process.platform === 'darwin' && process.env.RUN_NATIVE_SCREENSHOT_INTEGRATION === '1'
@@ -20,8 +20,13 @@ function assertJpeg(pathname: string): void {
   expect(bytes.subarray(0, JPEG_SIGNATURE.length).equals(JPEG_SIGNATURE)).toBe(true)
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 describeIntegration('native screenshot daemon integration', () => {
   let daemon: ScreenshotDaemon
+  const receivedFrames: CapturedFrame[] = []
 
   beforeAll(async () => {
     if (!fs.existsSync(SCREENSHOT_BINARY_PATH)) {
@@ -33,7 +38,14 @@ describeIntegration('native screenshot daemon integration', () => {
     fs.mkdirSync(RUN_OUTPUT_DIR, { recursive: true })
 
     daemon = new ScreenshotDaemon()
-    await daemon.start()
+    await daemon.start({
+      outputDir: RUN_OUTPUT_DIR,
+      intervalMs: 500,
+      maxDimensionPx: 1920,
+      onFrame: (frame) => {
+        receivedFrames.push(frame)
+      },
+    })
   })
 
   afterAll(async () => {
@@ -41,48 +53,41 @@ describeIntegration('native screenshot daemon integration', () => {
     delete process.env.MEMORYLANE_SCREENSHOT_EXECUTABLE
   })
 
-  it('captures a real desktop screenshot via daemon', async () => {
-    const outputPath = path.join(RUN_OUTPUT_DIR, 'desktop.jpg')
-    const result = await daemon.capture({ outputPath })
+  it('autonomously captures frames and pushes them via onFrame', async () => {
+    // Wait for a few frames to arrive
+    const startCount = receivedFrames.length
+    await sleep(2000)
 
-    expect(result.filepath).toBe(outputPath)
-    expect(result.width).toBeGreaterThan(0)
-    expect(result.height).toBeGreaterThan(0)
-    assertJpeg(outputPath)
-  })
+    const newFrames = receivedFrames.slice(startCount)
+    expect(newFrames.length).toBeGreaterThanOrEqual(2)
 
-  it('captures a screenshot for an explicitly requested display id', async () => {
-    const baselinePath = path.join(RUN_OUTPUT_DIR, 'baseline-display.jpg')
-    const baselineCapture = await daemon.capture({ outputPath: baselinePath })
-    assertJpeg(baselinePath)
+    for (const frame of newFrames) {
+      expect(frame.filepath).toBeTruthy()
+      expect(frame.width).toBeGreaterThan(0)
+      expect(frame.height).toBeGreaterThan(0)
+      expect(frame.timestamp).toBeGreaterThan(0)
+      expect(frame.displayId).toBeGreaterThan(0)
+      expect(Math.max(frame.width, frame.height)).toBeLessThanOrEqual(1920)
+      assertJpeg(frame.filepath)
+    }
+  }, 10_000)
 
-    const explicitOutputPath = path.join(RUN_OUTPUT_DIR, 'explicit-display.jpg')
-    const explicitCapture = await daemon.capture({
-      outputPath: explicitOutputPath,
-      displayId: baselineCapture.displayId,
-    })
+  it('accepts displayId command via send', async () => {
+    // Grab current display ID from a received frame
+    expect(receivedFrames.length).toBeGreaterThan(0)
+    const currentDisplayId = receivedFrames[receivedFrames.length - 1].displayId
 
-    expect(explicitCapture.filepath).toBe(explicitOutputPath)
-    expect(explicitCapture.displayId).toBe(baselineCapture.displayId)
-    expect(explicitCapture.width).toBeGreaterThan(0)
-    expect(explicitCapture.height).toBeGreaterThan(0)
-    assertJpeg(explicitOutputPath)
-  })
+    // Send same display ID (should not crash)
+    daemon.send({ displayId: currentDisplayId })
+    await sleep(1500)
 
-  it('respects max dimension when requested', async () => {
-    const outputPath = path.join(RUN_OUTPUT_DIR, 'max-dimension.jpg')
-    const result = await daemon.capture({ outputPath, maxDimensionPx: 1920 })
-
-    expect(result.filepath).toBe(outputPath)
-    expect(result.width).toBeGreaterThan(0)
-    expect(result.height).toBeGreaterThan(0)
-    expect(Math.max(result.width, result.height)).toBeLessThanOrEqual(1920)
-    assertJpeg(outputPath)
-  })
+    // Frames should still be arriving
+    const recentFrame = receivedFrames[receivedFrames.length - 1]
+    expect(recentFrame.displayId).toBe(currentDisplayId)
+  }, 10_000)
 
   it('prints where screenshots were saved for manual inspection', () => {
-    expect(fs.existsSync(path.join(RUN_OUTPUT_DIR, 'desktop.jpg'))).toBe(true)
-    expect(fs.existsSync(path.join(RUN_OUTPUT_DIR, 'explicit-display.jpg'))).toBe(true)
+    expect(receivedFrames.length).toBeGreaterThan(0)
     console.log(`[NativeScreenshotIntegration] Saved captures in: ${RUN_OUTPUT_DIR}`)
   })
 })

@@ -1,21 +1,35 @@
 import { type ChildProcess, spawn } from 'child_process'
 import * as fs from 'fs'
-import * as path from 'path'
 import * as readline from 'readline'
 import log from '../../logger'
 import { getExecutable } from './native-screenshot-mac'
 
-export interface DesktopCaptureResult {
+// MARK: - Push-based backend interface
+
+export interface CapturedFrame {
   filepath: string
+  timestamp: number
   width: number
   height: number
   displayId: number
 }
 
+export interface CaptureBackendConfig {
+  outputDir: string
+  intervalMs?: number
+  maxDimensionPx?: number
+  onFrame: (frame: CapturedFrame) => void
+}
+
+export type CaptureBackendCommand = {
+  displayId?: number | null // null = reset to main display
+  intervalMs?: number
+}
+
 export interface ScreenCaptureBackend {
-  start(): Promise<void>
+  start(config: CaptureBackendConfig): Promise<void>
   stop(): Promise<void>
-  capture(options: DaemonCaptureOptions): Promise<DesktopCaptureResult>
+  send(command: CaptureBackendCommand): void
 }
 
 const PLATFORM_SCREEN_CAPTURE_BACKENDS: Partial<
@@ -32,48 +46,23 @@ export function createScreenCaptureBackend(): ScreenCaptureBackend {
   return factory()
 }
 
-function ensureParentDirExists(outputPath: string): void {
-  const parentDir = path.dirname(outputPath)
-  fs.mkdirSync(parentDir, { recursive: true })
-}
-
-// MARK: - ScreenshotDaemon (persistent SCK-backed capture)
-
-export interface DaemonCaptureOptions {
-  outputPath: string
-  displayId?: number
-  maxDimensionPx?: number
-  format?: 'jpeg' | 'png'
-  quality?: number
-}
-
-interface DaemonResponse {
-  status: 'ok' | 'error'
-  filepath?: string
-  width?: number
-  height?: number
-  displayId?: number
-  error?: string
-}
+// MARK: - ScreenshotDaemon (autonomous push-based SCK daemon)
 
 const DAEMON_MAX_RESTARTS = 5
 const DAEMON_RESTART_BACKOFF_MS = 1_000
-const DAEMON_CAPTURE_TIMEOUT_MS = 10_000
 
-export class ScreenshotDaemon {
+export class ScreenshotDaemon implements ScreenCaptureBackend {
   private process: ChildProcess | null = null
   private rl: readline.Interface | null = null
   private restartCount = 0
   private started = false
   private restartTimer: ReturnType<typeof setTimeout> | null = null
-  private pendingCapture: {
-    resolve: (result: DesktopCaptureResult) => void
-    reject: (error: Error) => void
-    timer: ReturnType<typeof setTimeout>
-  } | null = null
+  private config: CaptureBackendConfig | null = null
 
-  async start(): Promise<void> {
+  async start(config: CaptureBackendConfig): Promise<void> {
     if (this.started) return
+    this.config = config
+    fs.mkdirSync(config.outputDir, { recursive: true })
     this.started = true
     this.restartCount = 0
     await this.spawnDaemon()
@@ -82,59 +71,50 @@ export class ScreenshotDaemon {
   async stop(): Promise<void> {
     if (!this.started) return
     this.started = false
+    this.config = null
     this.cancelScheduledRestart()
-    this.rejectPending('Daemon stopped')
     this.killProcess()
   }
 
-  async capture(options: DaemonCaptureOptions): Promise<DesktopCaptureResult> {
-    if (!this.started) {
-      throw new Error('[ScreenshotDaemon] Not started')
+  send(command: CaptureBackendCommand): void {
+    if (!this.started || !this.process?.stdin?.writable) {
+      log.warn('[ScreenshotDaemon] Cannot send command: daemon not running')
+      return
     }
 
-    if (this.pendingCapture) {
-      throw new Error('[ScreenshotDaemon] Capture already in progress')
+    const payload: Record<string, unknown> = {}
+    if (command.displayId !== undefined) {
+      payload.displayId = command.displayId
+    }
+    if (command.intervalMs !== undefined) {
+      payload.intervalMs = command.intervalMs
     }
 
-    ensureParentDirExists(options.outputPath)
-
-    // If daemon process died, try to restart (cancel any scheduled restart first)
-    if (!this.process) {
-      this.cancelScheduledRestart()
-      await this.spawnDaemon()
-    }
-
-    if (!this.process?.stdin?.writable) {
-      throw new Error('[ScreenshotDaemon] Daemon stdin not writable')
-    }
-
-    return new Promise<DesktopCaptureResult>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        log.warn('[ScreenshotDaemon] Capture timed out, restarting daemon')
-        this.rejectPending('Capture timed out')
-        this.killProcess()
-        // Will be restarted on next capture call
-      }, DAEMON_CAPTURE_TIMEOUT_MS)
-
-      this.pendingCapture = { resolve, reject, timer }
-
-      const command = JSON.stringify({
-        output: options.outputPath,
-        displayId: options.displayId,
-        maxDimension: options.maxDimensionPx,
-        format: options.format ?? 'jpeg',
-        quality: options.quality ?? 80,
-      })
-
-      this.process!.stdin!.write(command + '\n')
-    })
+    this.process.stdin.write(JSON.stringify(payload) + '\n')
   }
 
   private async spawnDaemon(): Promise<void> {
     const { command, args } = getExecutable()
+    const config = this.config!
+
+    const daemonArgs = [
+      ...args,
+      '--outputDir',
+      config.outputDir,
+      '--intervalMs',
+      String(config.intervalMs ?? 1000),
+      '--format',
+      'jpeg',
+      '--quality',
+      '80',
+    ]
+
+    if (config.maxDimensionPx !== undefined) {
+      daemonArgs.push('--maxDimension', String(config.maxDimensionPx))
+    }
 
     log.info('[ScreenshotDaemon] Spawning daemon process')
-    const proc = spawn(command, [...args], {
+    const proc = spawn(command, daemonArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
     })
 
@@ -144,7 +124,7 @@ export class ScreenshotDaemon {
     this.rl = rl
 
     rl.on('line', (line) => {
-      this.handleResponse(line)
+      this.handleLine(line)
     })
 
     proc.stderr?.on('data', (chunk) => {
@@ -156,46 +136,33 @@ export class ScreenshotDaemon {
 
     proc.on('error', (err) => {
       log.error('[ScreenshotDaemon] Process error:', err)
-      this.rejectPending(`Daemon process error: ${err.message}`)
       this.handleProcessExit()
     })
 
     proc.on('close', (code) => {
       log.warn(`[ScreenshotDaemon] Process exited with code ${code}`)
-      this.rejectPending(`Daemon exited with code ${code}`)
       this.handleProcessExit()
     })
   }
 
-  private handleResponse(line: string): void {
-    if (!this.pendingCapture) return
-
-    let parsed: DaemonResponse
+  private handleLine(line: string): void {
+    let parsed: CapturedFrame
     try {
-      parsed = JSON.parse(line) as DaemonResponse
+      parsed = JSON.parse(line) as CapturedFrame
     } catch {
-      log.warn(`[ScreenshotDaemon] Invalid JSON response: ${line}`)
+      log.warn(`[ScreenshotDaemon] Invalid JSON from daemon: ${line}`)
       return
     }
 
-    const { resolve, reject, timer } = this.pendingCapture
-    this.pendingCapture = null
-    clearTimeout(timer)
-
-    if (parsed.status === 'error') {
-      reject(new Error(`[ScreenshotDaemon] ${parsed.error ?? 'Unknown error'}`))
+    if (!parsed.filepath || !parsed.timestamp) {
+      log.warn(`[ScreenshotDaemon] Incomplete frame data: ${line}`)
       return
     }
 
-    // Reset restart count on success
+    // Reset restart count on successful frame
     this.restartCount = 0
 
-    resolve({
-      filepath: parsed.filepath!,
-      width: parsed.width!,
-      height: parsed.height!,
-      displayId: parsed.displayId!,
-    })
+    this.config?.onFrame(parsed)
   }
 
   private handleProcessExit(): void {
@@ -224,14 +191,6 @@ export class ScreenshotDaemon {
         log.error('[ScreenshotDaemon] Restart failed:', err)
       })
     }, delay)
-  }
-
-  private rejectPending(reason: string): void {
-    if (!this.pendingCapture) return
-    const { reject, timer } = this.pendingCapture
-    this.pendingCapture = null
-    clearTimeout(timer)
-    reject(new Error(`[ScreenshotDaemon] ${reason}`))
   }
 
   private cancelScheduledRestart(): void {
