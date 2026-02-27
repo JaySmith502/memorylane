@@ -9,8 +9,6 @@ import { ManageKeySection } from './components/ManageKeySection'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import type { CaptureSettings, CustomEndpointStatus, KeyStatus, SemanticPipelineMode } from '@types'
 
-// base-ui fires onValueChange with `number | readonly number[]` depending on
-// how the value prop was typed — normalise to a plain number either way.
 function sliderVal(v: number | readonly number[]): number {
   return typeof v === 'number' ? v : v[0]
 }
@@ -29,6 +27,7 @@ type SliderRowProps = {
   step: number
   format: (v: number) => string
   onChange: (v: number) => void
+  onCommit: (v: number) => void
 }
 
 function SliderRow({
@@ -39,6 +38,7 @@ function SliderRow({
   step,
   format,
   onChange,
+  onCommit,
 }: SliderRowProps): React.JSX.Element {
   return (
     <div className="space-y-1.5">
@@ -52,17 +52,41 @@ function SliderRow({
         max={max}
         step={step}
         onValueChange={(v) => onChange(sliderVal(v))}
+        onValueCommitted={(v) => onCommit(sliderVal(v))}
       />
     </div>
+  )
+}
+
+function SectionToggle({
+  label,
+  open,
+  onToggle,
+}: {
+  label: string
+  open: boolean
+  onToggle: () => void
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className="flex w-full items-center gap-2 py-1 text-xs font-medium text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors"
+      onClick={onToggle}
+    >
+      <span className="text-[10px]">{open ? '\u25BC' : '\u25B6'}</span>
+      {label}
+    </button>
   )
 }
 
 export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.JSX.Element {
   const api = useMainWindowAPI()
   const [form, setForm] = useState<CaptureSettings | null>(null)
-  const [dirty, setDirty] = useState(false)
   const [endpointStatus, setEndpointStatus] = useState<CustomEndpointStatus | null>(null)
   const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null)
+  const [llmOpen, setLlmOpen] = useState(false)
+  const [dataOpen, setDataOpen] = useState(false)
+  const [captureOpen, setCaptureOpen] = useState(false)
 
   const load = useCallback(async () => {
     const [s, ep, ks] = await Promise.all([
@@ -71,7 +95,6 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
       api.getKeyStatus(),
     ])
     setForm(s)
-    setDirty(false)
     setEndpointStatus(ep)
     setKeyStatus(ks)
   }, [api])
@@ -80,23 +103,33 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
     void load()
   }, [load])
 
+  const save = useCallback(
+    (settings: CaptureSettings) => {
+      void api.saveCaptureSettings(settings).then(() => {
+        toast.success('Settings saved', { id: 'auto-save', duration: 1500 })
+      })
+    },
+    [api],
+  )
+
   type NumericCaptureSetting = Exclude<keyof CaptureSettings, 'semanticPipelineMode'>
 
   const set = (key: NumericCaptureSetting, value: number): void => {
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev))
-    setDirty(true)
+  }
+
+  const commit = (key: NumericCaptureSetting, value: number): void => {
+    if (!form) return
+    const next = { ...form, [key]: value }
+    setForm(next)
+    save(next)
   }
 
   const setSemanticPipelineMode = (mode: SemanticPipelineMode): void => {
-    setForm((prev) => (prev ? { ...prev, semanticPipelineMode: mode } : prev))
-    setDirty(true)
-  }
-
-  const handleSave = async (): Promise<void> => {
     if (!form) return
-    await api.saveCaptureSettings(form)
-    setDirty(false)
-    toast.success('Settings saved')
+    const next = { ...form, semanticPipelineMode: mode }
+    setForm(next)
+    save(next)
   }
 
   const handleReset = async (): Promise<void> => {
@@ -105,199 +138,210 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
   }
 
   return (
-    <div className="p-6 max-w-xl mx-auto space-y-5">
-      <div className="flex items-center">
-        <button
-          onClick={onBack}
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          ← Back
-        </button>
-      </div>
+    <div className="p-6 max-w-xl mx-auto space-y-4">
+      <button
+        onClick={onBack}
+        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        ← Back
+      </button>
 
-      <section className="space-y-3">
-        <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            LLM Config
-          </p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Use an OpenRouter API key or bring your own model.
-          </p>
-        </div>
-
-        {keyStatus && !endpointStatus?.enabled && (
-          <ManageKeySection
-            api={api}
-            keyStatus={keyStatus}
-            onKeyDeleted={() => void api.getKeyStatus().then(setKeyStatus)}
-            onKeyUpdated={() => void api.getKeyStatus().then(setKeyStatus)}
-          />
-        )}
-
-        {endpointStatus && (
-          <>
-            {keyStatus && !endpointStatus.enabled && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <div className="flex-1 h-px bg-border" />
-                <span>or</span>
-                <div className="flex-1 h-px bg-border" />
-              </div>
+      {/* ── LLM Configuration ── */}
+      <section>
+        <SectionToggle
+          label="LLM Configuration"
+          open={llmOpen}
+          onToggle={() => setLlmOpen((v) => !v)}
+        />
+        {llmOpen && (
+          <div className="mt-3 space-y-3">
+            {keyStatus && !endpointStatus?.enabled && (
+              <ManageKeySection
+                api={api}
+                keyStatus={keyStatus}
+                onKeyDeleted={() => void api.getKeyStatus().then(setKeyStatus)}
+                onKeyUpdated={() => void api.getKeyStatus().then(setKeyStatus)}
+              />
             )}
-            <CustomEndpointSection
-              api={api}
-              endpointStatus={endpointStatus}
-              onEndpointChanged={() => void api.getCustomEndpoint().then(setEndpointStatus)}
-            />
-          </>
+            {endpointStatus && (
+              <>
+                {keyStatus && !endpointStatus.enabled && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <div className="flex-1 h-px bg-border" />
+                    <span>or</span>
+                    <div className="flex-1 h-px bg-border" />
+                  </div>
+                )}
+                <CustomEndpointSection
+                  api={api}
+                  endpointStatus={endpointStatus}
+                  onEndpointChanged={() => void api.getCustomEndpoint().then(setEndpointStatus)}
+                />
+              </>
+            )}
+          </div>
         )}
       </section>
 
       <div className="border-t border-border" />
 
-      <DatabaseExportSection api={api} />
+      {/* ── Data Management ── */}
+      <section>
+        <SectionToggle
+          label="Data Management"
+          open={dataOpen}
+          onToggle={() => setDataOpen((v) => !v)}
+        />
+        {dataOpen && (
+          <div className="mt-3">
+            <DatabaseExportSection api={api} />
+          </div>
+        )}
+      </section>
 
       {form && (
         <>
           <div className="border-t border-border" />
 
-          <section className="space-y-3">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Semantic Media Pipeline
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Choose how summaries are generated for each activity.
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              <Button
-                variant={form.semanticPipelineMode === 'auto' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setSemanticPipelineMode('auto')}
-              >
-                Auto
-              </Button>
-              <Button
-                variant={form.semanticPipelineMode === 'video' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setSemanticPipelineMode('video')}
-              >
-                Video only
-              </Button>
-              <Button
-                variant={form.semanticPipelineMode === 'image' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setSemanticPipelineMode('image')}
-              >
-                Image only
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {form.semanticPipelineMode === 'auto'
-                ? 'Tries video first, then falls back to images when needed.'
-                : form.semanticPipelineMode === 'video'
-                  ? 'Uses only the video pipeline and never falls back to images.'
-                  : 'Uses only image snapshots and skips video requests.'}
-            </p>
+          {/* ── Capture Settings ── */}
+          <section>
+            <SectionToggle
+              label="Capture Settings"
+              open={captureOpen}
+              onToggle={() => setCaptureOpen((v) => !v)}
+            />
+            {captureOpen && (
+              <div className="mt-3 space-y-5">
+                {/* Semantic Media Pipeline */}
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Semantic Media Pipeline
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button
+                      variant={form.semanticPipelineMode === 'auto' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setSemanticPipelineMode('auto')}
+                    >
+                      Auto
+                    </Button>
+                    <Button
+                      variant={form.semanticPipelineMode === 'video' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setSemanticPipelineMode('video')}
+                    >
+                      Video only
+                    </Button>
+                    <Button
+                      variant={form.semanticPipelineMode === 'image' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setSemanticPipelineMode('image')}
+                    >
+                      Image only
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {form.semanticPipelineMode === 'auto'
+                      ? 'Tries video first, then falls back to images when needed.'
+                      : form.semanticPipelineMode === 'video'
+                        ? 'Uses only the video pipeline and never falls back to images.'
+                        : 'Uses only image snapshots and skips video requests.'}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <SliderRow
+                    label="Visual change sensitivity"
+                    value={form.visualThreshold}
+                    min={1}
+                    max={20}
+                    step={1}
+                    format={(v) =>
+                      `${v}% — ${v <= 5 ? 'more captures' : v >= 15 ? 'fewer captures' : 'balanced'}`
+                    }
+                    onChange={(v) => set('visualThreshold', v)}
+                    onCommit={(v) => commit('visualThreshold', v)}
+                  />
+                </div>
+
+                {/* Interaction Timeouts */}
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Interaction Timeouts</p>
+                  <SliderRow
+                    label="Typing debounce"
+                    value={form.typingDebounceMs}
+                    min={500}
+                    max={10000}
+                    step={100}
+                    format={formatMs}
+                    onChange={(v) => set('typingDebounceMs', v)}
+                    onCommit={(v) => commit('typingDebounceMs', v)}
+                  />
+                  <SliderRow
+                    label="Scroll debounce"
+                    value={form.scrollDebounceMs}
+                    min={200}
+                    max={5000}
+                    step={100}
+                    format={formatMs}
+                    onChange={(v) => set('scrollDebounceMs', v)}
+                    onCommit={(v) => commit('scrollDebounceMs', v)}
+                  />
+                  <SliderRow
+                    label="Click debounce"
+                    value={form.clickDebounceMs}
+                    min={500}
+                    max={10000}
+                    step={100}
+                    format={formatMs}
+                    onChange={(v) => set('clickDebounceMs', v)}
+                    onCommit={(v) => commit('clickDebounceMs', v)}
+                  />
+                </div>
+
+                {/* Activity Windows */}
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Activity Windows</p>
+                  <SliderRow
+                    label="Minimum activity duration"
+                    value={form.minActivityDurationMs}
+                    min={1000}
+                    max={30000}
+                    step={1000}
+                    format={formatMs}
+                    onChange={(v) => set('minActivityDurationMs', v)}
+                    onCommit={(v) => commit('minActivityDurationMs', v)}
+                  />
+                  <SliderRow
+                    label="Maximum activity duration"
+                    value={form.maxActivityDurationMs}
+                    min={60000}
+                    max={1800000}
+                    step={60000}
+                    format={formatMs}
+                    onChange={(v) => set('maxActivityDurationMs', v)}
+                    onCommit={(v) => commit('maxActivityDurationMs', v)}
+                  />
+                  <SliderRow
+                    label="Max screenshots per activity"
+                    value={form.maxScreenshotsPerActivity}
+                    min={5}
+                    max={50}
+                    step={1}
+                    format={(v) => `${v}`}
+                    onChange={(v) => set('maxScreenshotsPerActivity', v)}
+                    onCommit={(v) => commit('maxScreenshotsPerActivity', v)}
+                  />
+                </div>
+
+                <div className="flex justify-end">
+                  <Button variant="ghost" size="sm" onClick={() => void handleReset()}>
+                    Reset to defaults
+                  </Button>
+                </div>
+              </div>
+            )}
           </section>
-
-          <div className="border-t border-border" />
-
-          <section className="space-y-3">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Visual Change Detection
-            </p>
-            <SliderRow
-              label="Sensitivity threshold"
-              value={form.visualThreshold}
-              min={1}
-              max={20}
-              step={1}
-              format={(v) =>
-                `${v}% — ${v <= 5 ? 'more captures' : v >= 15 ? 'fewer captures' : 'balanced'}`
-              }
-              onChange={(v) => set('visualThreshold', v)}
-            />
-          </section>
-
-          <div className="border-t border-border" />
-
-          <section className="space-y-3">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Interaction Timeouts
-            </p>
-            <SliderRow
-              label="Typing debounce"
-              value={form.typingDebounceMs}
-              min={500}
-              max={10000}
-              step={100}
-              format={formatMs}
-              onChange={(v) => set('typingDebounceMs', v)}
-            />
-            <SliderRow
-              label="Scroll debounce"
-              value={form.scrollDebounceMs}
-              min={200}
-              max={5000}
-              step={100}
-              format={formatMs}
-              onChange={(v) => set('scrollDebounceMs', v)}
-            />
-            <SliderRow
-              label="Click debounce"
-              value={form.clickDebounceMs}
-              min={500}
-              max={10000}
-              step={100}
-              format={formatMs}
-              onChange={(v) => set('clickDebounceMs', v)}
-            />
-          </section>
-
-          <div className="border-t border-border" />
-
-          <section className="space-y-3">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Activity Windows
-            </p>
-            <SliderRow
-              label="Minimum activity duration"
-              value={form.minActivityDurationMs}
-              min={1000}
-              max={30000}
-              step={1000}
-              format={formatMs}
-              onChange={(v) => set('minActivityDurationMs', v)}
-            />
-            <SliderRow
-              label="Maximum activity duration"
-              value={form.maxActivityDurationMs}
-              min={60000}
-              max={1800000}
-              step={60000}
-              format={formatMs}
-              onChange={(v) => set('maxActivityDurationMs', v)}
-            />
-            <SliderRow
-              label="Max screenshots per activity"
-              value={form.maxScreenshotsPerActivity}
-              min={5}
-              max={50}
-              step={1}
-              format={(v) => `${v}`}
-              onChange={(v) => set('maxScreenshotsPerActivity', v)}
-            />
-          </section>
-
-          <div className="border-t border-border" />
-
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={() => void handleReset()}>
-              Reset to defaults
-            </Button>
-            <Button size="sm" onClick={() => void handleSave()} disabled={!dirty}>
-              Save
-            </Button>
-          </div>
         </>
       )}
     </div>

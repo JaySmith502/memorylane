@@ -30,18 +30,8 @@ export function DatabaseExportSection({ api }: DatabaseExportSectionProps): Reac
   }, [api])
 
   return (
-    <section className="space-y-3">
-      <div>
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Database Export
-        </p>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Export a ZIP snapshot of your local MemoryLane database.
-        </p>
-      </div>
-      <Button size="sm" onClick={() => void handleExportDatabase()} disabled={isExportingDb}>
-        {isExportingDb ? 'Exporting...' : 'Export Database (.zip)'}
-      </Button>
-    </section>
+    <Button size="sm" onClick={() => void handleExportDatabase()} disabled={isExportingDb}>
+      {isExportingDb ? 'Exporting...' : 'Export Database (.zip)'}
+    </Button>
   )
 }
