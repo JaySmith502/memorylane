@@ -296,10 +296,10 @@ class AutonomousCapture: NSObject, SCStreamOutput {
         let format = self.config.format
         let quality = self.config.quality
         let outputDir = self.config.outputDir
+        let captureTimestamp = Int(Date().timeIntervalSince1970 * 1000)
 
         writeQueue.async {
-            let timestamp = Int(Date().timeIntervalSince1970 * 1000)
-            let filename = "frame-\(timestamp).jpg"
+            let filename = "frame-\(captureTimestamp).jpg"
             let filepath = (outputDir as NSString).appendingPathComponent(filename)
 
             do {
@@ -308,7 +308,7 @@ class AutonomousCapture: NSObject, SCStreamOutput {
 
                 let payload: [String: Any] = [
                     "filepath": filepath,
-                    "timestamp": timestamp,
+                    "timestamp": captureTimestamp,
                     "width": resized.width,
                     "height": resized.height,
                     "displayId": Int(displayId),
