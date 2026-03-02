@@ -5,16 +5,16 @@ Difficulty scale: `S` (small), `M` (medium), `L` (large)
 ## Commit Breakdown
 
 1. **commit-01: Capture backend abstraction**
-   - Add platform backend interface + selector for v2 screenshot capture.
+   - Align Windows work with the existing `ScreenCaptureBackend`/`createScreenCaptureBackend()` abstraction in `src/main/v2/recorder/native-screenshot.ts`.
    - Difficulty: `M`
 
 2. **commit-02: Windows screenshot backend**
-   - Implement `win32` screenshot backend that returns the same capture contract as macOS.
+   - Implement a `win32` screenshot sidecar that plugs into the current persistent daemon flow and returns the same capture contract as macOS.
    - Difficulty: `L`
 
-3. **commit-03: Windows app/window watcher**
-   - Add `win32` app-watcher backend and wire it through `app-watcher.ts`.
-   - Difficulty: `L`
+3. **commit-03: Windows app/window watcher** (`Done`)
+   - Harden the existing Rust-based `win32` app-watcher path and validate display routing compatibility with v2 capture.
+   - Difficulty: `M`
 
 4. **commit-04: Windows preflight + degraded mode**
    - Extend startup checks for Windows dependencies and surface clear degraded-mode warnings.
@@ -25,7 +25,7 @@ Difficulty scale: `S` (small), `M` (medium), `L` (large)
    - Difficulty: `M`
 
 6. **commit-06: Packaging + updater readiness**
-   - Finalize Windows packaging inputs, signing assumptions, and updater validation.
+   - Finalize Windows packaging inputs, including the second Rust sidecar, plus signing assumptions and updater validation.
    - Difficulty: `M`
 
 7. **commit-07: Windows test coverage + CI gate**
@@ -52,4 +52,4 @@ graph TD
 
 ## Suggested Order
 
-`commit-01 -> commit-02 -> commit-03 -> commit-04 -> commit-05 -> commit-06 -> commit-07 -> commit-08`
+`commit-01 -> commit-02 -> commit-04 -> commit-05 -> commit-06 -> commit-07 -> commit-08`

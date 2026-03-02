@@ -6,16 +6,16 @@ Restore stable Windows support for the full v2 pipeline (capture -> activity con
 
 ## P0 (Must Work)
 
-- [ ] **Screen capture backend for Windows**  
-       Add a Windows implementation behind `src/main/v2/recorder/native-screenshot.ts` (or split by platform) so capture does not depend on the mac Swift `build/swift/screenshot` binary.
-- [ ] **Platform capture abstraction**  
-       Introduce a backend selector (`darwin`/`win32`) with one output contract (`filepath`, `width`, `height`, `displayId`) and explicit startup errors when no backend is available.
-- [ ] **Windows app/window watcher backend**  
-       Add `win32` backend wiring in `src/main/recorder/app-watcher.ts` so `interaction-monitor` receives real app/title changes instead of mostly unknown context.
+- [ ] **Windows screenshot backend in the existing daemon framework**  
+       Extend the current persistent capture backend in `src/main/v2/recorder/native-screenshot.ts` with a `win32` factory plus Windows-specific executable resolution so capture no longer depends on the mac Swift `build/swift/screenshot` binary.
+- [ ] **Finish the existing platform capture abstraction**  
+       Keep one output contract (`filepath`, `width`, `height`, `displayId`) through `ScreenCaptureBackend`, register `win32`, and preserve explicit startup errors when no backend is available.
+- [x] **Windows app/window watcher parity**  
+       Validate and harden the existing `win32` watcher path in `src/main/recorder/app-watcher.ts` and `src/main/recorder/app-watcher-win.ts` so `interaction-monitor` receives real app/title changes instead of mostly unknown context.
 - [ ] **Windows preflight checks at startup**  
-       Extend `src/main/ui/permissions.ts` into platform-specific preflight checks (capture availability, input hook availability, OCR prerequisites) rather than mac-only permission flow.
+       Extend `src/main/ui/permissions.ts` into platform-specific preflight checks (screenshot sidecar availability, input hook availability, OCR prerequisites) rather than mac-only permission flow.
 - [ ] **Windows packaging inputs**  
-       Update `electron-builder.yml` so Windows builds include Windows-specific sidecars and do not require mac Swift artifacts in Windows release flow.
+       Update `scripts/build-rust.js`, `package.json`, and `electron-builder.yml` so Windows builds include both Windows sidecars and do not rely on mac Swift artifacts in Windows release flow.
 
 ## P1 (Reliability + UX)
 

@@ -13,7 +13,7 @@ This commit should make v2 screenshot capture work on Windows without depending 
 
 ## Dependencies and Boundaries
 
-- Depends on `commit-01` capture backend abstraction.
+- Depends on `commit-01` capture backend alignment.
 - Do not include app watcher work (that is `commit-03`).
 - Do not include startup preflight/degraded messaging (that is `commit-04`).
 
@@ -29,7 +29,7 @@ Rationale:
 
 ## Native Module Shape (Commit 02)
 
-Use the same sidecar pattern as Windows `app-watcher`:
+Use the same sidecar pattern as Windows `app-watcher`, but plug it into the existing persistent daemon layer already used on macOS:
 
 - Create a separate Rust crate under `native/windows/` (for example `native/windows/screenshot-capturer/`).
 - Build an `.exe` into `build/rust/` and load from:
@@ -39,6 +39,7 @@ Use the same sidecar pattern as Windows `app-watcher`:
 - Communicate over JSONL on stdio:
   - command channel for start/stop/display-update configuration
   - event channel for `ready` / `frame` / `error`
+- Extend `scripts/build-rust.js` so `npm run build:rust` builds and copies both Windows Rust sidecars.
 
 This keeps Windows native process lifecycle, packaging, and diagnostics aligned with existing app-watcher conventions.
 
@@ -56,20 +57,27 @@ Windows screenshot backend rules:
 ## File-Level Plan
 
 1. Add Windows long-lived recorder backend module:
-   - `src/main/v2/recorder/screen-capturer-win.ts` (new)
+   - `src/main/v2/recorder/native-screenshot-win.ts` (new)
    - Responsibilities:
-     - resolve and spawn Windows screenshot sidecar executable
-     - send start/stop/display-update commands
-     - parse JSONL frame/error events from stdout
-     - apply restart/backoff behavior for unexpected exits
+     - resolve Windows screenshot sidecar executable location and override env var
+     - expose the command/args needed by the shared daemon lifecycle
 
-2. Wire `ScreenCapturer` Windows path:
+2. Extend the existing daemon backend registry:
+   - `src/main/v2/recorder/native-screenshot.ts`
+   - Register `win32` in `PLATFORM_SCREEN_CAPTURE_BACKENDS`.
+   - Reuse the current process lifecycle, JSONL parsing, command channel, and restart/backoff behavior already used by the mac backend.
+
+3. Keep `ScreenCapturer` API unchanged:
    - `src/main/v2/recorder/screen-capturer.ts`
    - Keep public API unchanged (`start`, `stop`, `setDisplayId`, stream append behavior).
-   - On `win32`, delegate cadence and capture production to `screen-capturer-win`.
-   - On other platforms, keep existing tick + `captureDesktop()` flow.
+   - `ScreenCapturer` should continue delegating to `createScreenCaptureBackend()` with no Windows-specific branching in the caller.
 
-3. Keep frame contract unchanged:
+4. Add the minimum build/packaging plumbing required for the new sidecar to resolve in dev and packaged builds:
+   - `scripts/build-rust.js`
+   - `package.json`
+   - `electron-builder.yml`
+
+5. Keep frame contract unchanged:
    - `src/main/v2/recorder/screen-capturer.ts`
    - `Frame` payload shape and downstream stream semantics remain unchanged in this commit.
 
@@ -77,12 +85,13 @@ Windows screenshot backend rules:
 
 - Input: `maxDimensionPx` is optional and must be positive finite when provided.
 - Output: resulting image must satisfy `max(width, height) <= maxDimensionPx` when requested.
-- Windows sidecar must enforce this bound before writing PNG and emitting frame metadata.
+- Windows sidecar must enforce this bound before writing the captured image file and emitting frame metadata.
 
 ## Tests in Scope
 
 1. Add Windows backend unit tests:
-   - `src/main/v2/recorder/screen-capturer-win.test.ts` (new)
+   - `src/main/v2/recorder/native-screenshot-win.test.ts` (new)
+   - Extend `src/main/v2/recorder/native-screenshot.test.ts`
    - Mock child process lifecycle and JSONL event stream.
    - Cover:
      - start/stop idempotency
@@ -92,20 +101,22 @@ Windows screenshot backend rules:
      - malformed event handling and error propagation
 
 2. Update `ScreenCapturer` tests:
-   - `src/main/v2/recorder/screen-capturer.integration.test.ts`
+   - `src/main/v2/recorder/screen-capturer.test.ts`
    - Assert Windows path preserves stream sequence behavior and stop semantics.
 
 3. Add Windows integration test with persisted outputs:
-   - `src/main/v2/recorder/screen-capturer.windows.integration.test.ts` (new)
+   - `src/main/v2/recorder/native-screenshot.windows.integration.test.ts` (new)
+   - Optionally add `src/main/v2/recorder/screen-capturer.windows.integration.test.ts` as a thin end-to-end smoke test over the public wrapper
    - Gate with:
      - `process.platform === 'win32'`
      - `RUN_WINDOWS_INTEGRATION=1`
-   - Persist artifacts in:
-     - `.debug-native-screenshot-win/<timestamp>/`
-   - Required artifacts:
-     - captured frame PNG files (same output directory structure used by `ScreenCapturer`)
-     - `frame-events.jsonl` (filepath/width/height/displayId/sequenceNumber)
-     - `summary.json` (frame counts, first/last timestamps, restart count if any)
+
+- Persist artifacts in:
+  - `.debug-native-screenshot-win/<timestamp>/`
+- Required artifacts:
+  - captured frame image files (same output directory structure used by `ScreenCapturer`)
+  - `frame-events.jsonl` (filepath/width/height/displayId/sequenceNumber)
+  - `summary.json` (frame counts, first/last timestamps, restart count if any)
 
 ## Verification Criteria
 
@@ -115,7 +126,7 @@ Windows screenshot backend rules:
 
 ## Acceptance Criteria
 
-- On `win32`, v2 frame capture runs through a long-lived native sidecar and writes PNGs.
+- On `win32`, v2 frame capture runs through a long-lived native sidecar and writes image files compatible with the existing frame contract.
 - Returned `displayId` is numeric and usable by downstream v2 code.
 - Existing call sites (`ScreenCapturer`, pipeline harness) require no contract changes.
 - Unit + Windows integration tests for this commit pass.
