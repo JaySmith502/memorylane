@@ -48,24 +48,24 @@ jobs:
             exit 1
           fi
 
-      # - name: Check macOS signing secrets
-      #   run: |
-      #     missing=0
-      #     for name in MAC_CERT_BASE64 MAC_CERT_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD; do
-      #       if [ -z "${!name:-}" ]; then
-      #         echo "Missing required secret: $name" >&2
-      #         missing=1
-      #       fi
-      #     done
+      - name: Check macOS signing secrets
+        run: |
+          missing=0
+          for name in MAC_CERT_BASE64 MAC_CERT_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required secret: $name" >&2
+              missing=1
+            fi
+          done
 
-      #     if [ "$missing" -ne 0 ]; then
-      #       exit 1
-      #     fi
-      #   env:
-      #     MAC_CERT_BASE64: ${{ secrets.MAC_CERT_BASE64 }}
-      #     MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
-      #     APPLE_ID: ${{ secrets.APPLE_ID }}
-      #     APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+        env:
+          MAC_CERT_BASE64: ${{ secrets.MAC_CERT_BASE64 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
 
       - name: Check Windows signing secrets
         run: |
@@ -85,63 +85,63 @@ jobs:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
 
-  # build-mac:
-  #   name: Build macOS
-  #   runs-on: macos-15
-  #   needs: validate-release
-  #   permissions:
-  #     contents: read
+  build-mac:
+    name: Build macOS
+    runs-on: macos-15
+    needs: validate-release
+    permissions:
+      contents: read
 
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  #     - name: Setup Node.js
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: ${{ env.NODE_VERSION }}
-  #         cache: npm
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
 
-  #     - name: Install dependencies
-  #       run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-  #     - name: Import macOS signing certificate
-  #       env:
-  #         MAC_CERT_BASE64: ${{ secrets.MAC_CERT_BASE64 }}
-  #         MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
-  #       run: |
-  #         CERT_PATH="$RUNNER_TEMP/memorylane-signing.p12"
-  #         KEYCHAIN_PATH="$RUNNER_TEMP/memorylane-signing.keychain-db"
-  #         KEYCHAIN_PASSWORD="$(uuidgen)"
+      - name: Import macOS signing certificate
+        env:
+          MAC_CERT_BASE64: ${{ secrets.MAC_CERT_BASE64 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        run: |
+          CERT_PATH="$RUNNER_TEMP/memorylane-signing.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/memorylane-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
 
-  #         echo -n "$MAC_CERT_BASE64" | base64 --decode > "$CERT_PATH"
+          echo -n "$MAC_CERT_BASE64" | base64 --decode > "$CERT_PATH"
 
-  #         security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-  #         security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-  #         security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-  #         security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
-  #         security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
-  #         security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-  #         echo "CSC_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+          echo "CSC_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
 
-  #     - name: Build signed macOS artifacts
-  #       env:
-  #         APPLE_ID: ${{ secrets.APPLE_ID }}
-  #         APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-  #       run: npm run make:mac
+      - name: Build signed macOS artifacts
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: npm run make:mac
 
-  #     - name: Upload macOS release files
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: release-macos-${{ env.RELEASE_TAG }}
-  #         retention-days: 3
-  #         if-no-files-found: error
-  #         path: |
-  #           dist/*.dmg
-  #           dist/*.zip
-  #           dist/*.blockmap
-  #           dist/latest-mac.yml
+      - name: Upload macOS release files
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-macos-${{ env.RELEASE_TAG }}
+          retention-days: 3
+          if-no-files-found: error
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.blockmap
+            dist/latest-mac.yml
 
   build-win:
     name: Build Windows
