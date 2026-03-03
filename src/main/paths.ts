@@ -1,13 +1,16 @@
 import * as path from 'path'
 import * as os from 'os'
 
+const DEV_ELECTRON_EXECUTABLE_NAMES = new Set(['electron', 'electron.exe'])
+
 /**
  * Gets the default path for the SQLite database file.
  * Used when running outside of the main Electron process (e.g. CLI tools, MCP server standalone).
  * In the main Electron process, it is preferred to use app.getPath('userData').
  */
 export function getDefaultDbPath(): string {
-  const dbFile = isDev() ? 'memorylane-dev.db' : 'memorylane.db'
+  const dev = isDev()
+  const dbFile = dev ? 'memorylane-dev.db' : 'memorylane.db'
 
   if (process.versions.electron) {
     try {
@@ -23,13 +26,7 @@ export function getDefaultDbPath(): string {
   }
 
   // Fallback for CLI / Standalone mode (mimic Electron's default paths)
-  if (process.platform === 'darwin') {
-    return path.join(os.homedir(), 'Library', 'Application Support', 'memorylane', dbFile)
-  }
-  if (process.platform === 'win32') {
-    return path.join(process.env.APPDATA || '', 'memorylane', dbFile)
-  }
-  return path.join(os.homedir(), '.config', 'memorylane', dbFile)
+  return buildFallbackDbPath(process.platform, os.homedir(), process.env.APPDATA, dev)
 }
 
 function isDev(): boolean {
@@ -42,9 +39,30 @@ function isDev(): boolean {
       // require('electron') can fail under ELECTRON_RUN_AS_NODE
     }
 
-    // Under ELECTRON_RUN_AS_NODE (MCP server), app.isPackaged is unavailable.
-    // Detect packaged app by checking if we're running from inside a .app bundle.
-    if (process.execPath.includes('.app/')) return false
+    return !isPackagedElectronExecutable(process.execPath)
   }
   return process.env.NODE_ENV !== 'production'
+}
+
+export function isPackagedElectronExecutable(execPath: string): boolean {
+  const executableName = path.basename(execPath).toLowerCase()
+  return !DEV_ELECTRON_EXECUTABLE_NAMES.has(executableName)
+}
+
+export function buildFallbackDbPath(
+  platform: NodeJS.Platform,
+  homeDir: string,
+  appDataDir: string | undefined,
+  dev: boolean,
+): string {
+  const appDirectory = dev ? 'memorylane' : 'MemoryLane'
+  const dbFile = dev ? 'memorylane-dev.db' : 'memorylane.db'
+
+  if (platform === 'darwin') {
+    return path.join(homeDir, 'Library', 'Application Support', appDirectory, dbFile)
+  }
+  if (platform === 'win32') {
+    return path.join(appDataDir || '', appDirectory, dbFile)
+  }
+  return path.join(homeDir, '.config', appDirectory, dbFile)
 }
