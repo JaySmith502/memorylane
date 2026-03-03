@@ -1,6 +1,6 @@
 # MemoryLane v0.13.4
 
-MemoryLane is a desktop tray app that captures your screen activity, processes it with OCR and AI summarization, and makes it searchable through an MCP server - giving AI assistants like Claude and Cursor memory of what you've been working on. Stable releases are currently macOS-only, while Windows builds ship through signed prereleases.
+MemoryLane is a desktop tray app that captures your screen activity, processes it with OCR and AI summarization, and makes it searchable through an MCP server - giving AI assistants like Claude and Cursor memory of what you've been working on. Releases are published from version tags: normal semver tags create standard releases, and suffixed versions such as `-beta.1` create prereleases.
 
 ## What's Changed
 
@@ -9,7 +9,7 @@ MemoryLane is a desktop tray app that captures your screen activity, processes i
 - **Capture state survives relaunches and wake-ups** - the app now persists whether capture was enabled, then restores that preference on startup and after power-state resume
 - **Single-instance startup is more reliable** - a second launch now focuses the existing app window instead of creating conflicting tray behavior
 - **Advanced settings now expose startup controls** - added a Launch at login toggle with clearer success/error handling when saving settings
-- **Signed Windows prerelease path is now part of the release workflow** - Windows installers can be published as signed GitHub prerelease artifacts with updater metadata
+- **Signed macOS + Windows releases now ship from the same tag-driven workflow** - pushing a version tag builds both platforms, uploads updater metadata, and publishes the correct GitHub release channel automatically
 
 ## Features
 
@@ -41,8 +41,8 @@ MemoryLane is a desktop tray app that captures your screen activity, processes i
 
 ## Known Issues & Limitations
 
-- **Stable release artifacts are macOS ARM64 only** - official stable release assets are currently Apple Silicon macOS (`.zip` and `.dmg`)
-- **Windows distribution is prerelease-only for now** - signed Windows installers are published through GitHub prereleases, not the stable release channel
+- **macOS builds are Apple Silicon only** - official macOS release assets currently target ARM64 (`.zip` and `.dmg`)
+- **Windows support is still preview quality** - signed installers now ship through the main release workflow, but some OS-specific UX still needs tuning
 - **Linux and Intel macOS not yet officially supported**
 
 ## Installation
@@ -53,7 +53,7 @@ curl -fsSL https://raw.githubusercontent.com/deusXmachina-dev/memorylane/main/in
 
 This downloads the latest macOS stable release and installs it to `/Applications`. No Gatekeeper warnings.
 
-For Windows, download the latest prerelease installer from GitHub Releases and use the `MemoryLane Setup *.exe` asset from the newest prerelease.
+For Windows, download the latest `MemoryLane Setup *.exe` from GitHub Releases. If you are testing a beta or RC build, use the newest prerelease for that version line.
 
 After launching:
 

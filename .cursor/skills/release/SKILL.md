@@ -1,23 +1,27 @@
 ---
 name: release
-description: Run the stable macOS release workflow for MemoryLane - bump version, update release notes, commit, tag, push, build, and create a GitHub release. Use when the user asks to release, ship, publish, bump version, or cut a stable version.
+description: Prepare a MemoryLane release by updating the version and release notes, then creating and pushing the tagged release commit that triggers CI. Use when the user asks to release, ship, publish, bump version, or cut a stable or prerelease version.
 ---
 
-# Stable macOS Release Workflow
+# MemoryLane Release Workflow
 
-Use this skill for normal stable releases. For Windows prerelease distribution, use the `windows-prerelease` skill instead.
+Use this skill for both normal releases and prereleases. The GitHub Actions release pipeline builds macOS and Windows artifacts after the tagged commit is pushed. Tags without a suffix publish regular releases. Tags with a semver suffix such as `-beta.1` publish GitHub prereleases.
 
 ## Prerequisites
 
 - Working tree is clean (`git status` shows nothing to commit)
 - On the `main` branch, up to date with origin
-- `gh` CLI is authenticated (`gh auth status` - run with `required_permissions: ["all"]`)
 
 ## Steps
 
 ### 1. Determine the new version
 
-Ask the user if not provided. Follow semver: `MAJOR.MINOR.PATCH`.
+Ask the user if not provided.
+
+- Stable: `MAJOR.MINOR.PATCH`
+- Prerelease: `MAJOR.MINOR.PATCH-label.N`
+
+The git tag format is always `v<version>`.
 
 ### 2. Review changes since the last tag
 
@@ -26,7 +30,7 @@ git log --oneline $(git describe --tags --abbrev=0)..HEAD
 git diff --stat $(git describe --tags --abbrev=0)..HEAD
 ```
 
-Summarize the key changes. This drives the release notes.
+Summarize the key user-facing changes. This drives `RELEASE_NOTES.md`.
 
 ### 3. Bump version in `package.json`
 
@@ -34,13 +38,13 @@ Update the `"version"` field to the new version.
 
 ### 4. Update `RELEASE_NOTES.md`
 
-Follow the existing format in the file. Key sections to update:
+Follow the existing format in the file. Keep the wording brief and current.
 
 - **Title**: `# MemoryLane vX.Y.Z`
 - **What's Changed**: Summarize the commits into user-facing bullet points. Reference GitHub issues where applicable (for example `closes #4`).
 - **Features**: Update the feature list if new capabilities were added.
 - **Known Issues & Limitations**: Remove any issues that have been resolved. Add new ones if applicable.
-- **Installation**: Keep the macOS stable install path current, and keep Windows wording consistent with the prerelease-only channel.
+- **Installation**: Keep the macOS and Windows install guidance aligned with the current release channel.
 - **Full Changelog**: Update the tag reference in the URL.
 
 ### 5. Update `README.md` if needed
@@ -54,82 +58,51 @@ npm run format
 npm run lint
 ```
 
-### 7. Commit, tag, and push
+### 7. Commit and tag
+
+Stage only the files you changed:
 
 ```bash
-git add -A
+git add package.json RELEASE_NOTES.md
+# Add README.md only if it changed for this release.
+git add README.md
 git commit -m "release: vX.Y.Z"
 git tag vX.Y.Z
 ```
 
-Push requires network access - run outside the sandbox (`required_permissions: ["all"]`):
+If the version is a prerelease, keep the same commit format and tag shape:
 
 ```bash
-git push origin main --tags
+git commit -m "release: vX.Y.Z-label.N"
+git tag vX.Y.Z-label.N
 ```
 
-Push before building. The build is deterministic (runs from the local working tree pinned to the tagged commit) and can take a long time due to notarization. Pushing first ensures the tag is on the remote immediately, regardless of how long the build takes or whether other commits land on `main` in the meantime.
+### 8. Push the commit and tag
 
-### 8. Build the macOS app
 
 ```bash
-npm run make:mac
+git push origin HEAD
+git push origin vX.Y.Z
 ```
 
-The build produces both a ZIP and a DMG in `dist/` with stable filenames (no version number). Verify they exist and `latest-mac.yml` contains the correct version:
+For a prerelease version, push the prerelease tag instead:
 
 ```bash
-ls dist/MemoryLane-arm64-mac.zip
-ls dist/MemoryLane-arm64-mac.zip.blockmap
-ls dist/MemoryLane-arm64-mac.dmg
-ls dist/MemoryLane-arm64-mac.dmg.blockmap
-cat dist/latest-mac.yml
+git push origin HEAD
+git push origin vX.Y.Z-label.N
 ```
 
-These stable names are configured via `artifactName` in `electron-builder.yml`. They allow `https://github.com/{owner}/{repo}/releases/latest/download/{asset}` URLs to always resolve to the latest release, which `install.sh` depends on.
+Pushing the tag triggers `.github/workflows/release.yml`. That workflow builds both platforms and creates the GitHub release automatically.
 
-Notarization runs automatically via `build/notarize.js` (requires `APPLE_ID` and `APPLE_APP_PASSWORD` in `.env`). The build will take a few extra minutes while Apple processes the notarization request. If the env vars are not set, notarization is skipped and the app is only code-signed.
-
-After the build completes, verify notarization and code signing:
-
-```bash
-spctl --assess --verbose=4 --type execute "dist/mac-arm64/MemoryLane.app"
-codesign --verify --deep --strict "dist/mac-arm64/MemoryLane.app"
-```
-
-`spctl` should report `accepted` and `codesign` should exit 0 with no output.
-
-### 9. Create GitHub release
-
-Run outside the sandbox (`required_permissions: ["all"]`):
-
-```bash
-gh release create vX.Y.Z \
-  dist/MemoryLane-arm64-mac.zip \
-  dist/MemoryLane-arm64-mac.zip.blockmap \
-  dist/MemoryLane-arm64-mac.dmg \
-  dist/MemoryLane-arm64-mac.dmg.blockmap \
-  dist/latest-mac.yml \
-  --title "vX.Y.Z" \
-  --notes-file RELEASE_NOTES.md
-```
-
-`latest-mac.yml` is required by `electron-updater` to detect new versions. The `.blockmap` files are required by `electron-updater` for differential updates. All five artifacts must be uploaded with every release.
 
 ## Checklist
 
 Before finishing, verify:
 
 - [ ] `package.json` version matches the new tag
-- [ ] `RELEASE_NOTES.md` title, download filename, and changelog link all reference the new version
+- [ ] `RELEASE_NOTES.md` title and changelog link reference the new version
 - [ ] Resolved known issues are removed from release notes
 - [ ] `README.md` "Coming Soon" doesn't list shipped features
 - [ ] `npm run format` and `npm run lint` pass
-- [ ] Tag is pushed to origin
-- [ ] `dist/MemoryLane-arm64-mac.zip` exists
-- [ ] `dist/MemoryLane-arm64-mac.zip.blockmap` exists
-- [ ] `dist/MemoryLane-arm64-mac.dmg` exists
-- [ ] `dist/MemoryLane-arm64-mac.dmg.blockmap` exists
-- [ ] `dist/latest-mac.yml` contains the correct version (not stale from a previous build)
-- [ ] Notarization verified (`spctl --assess` reports `accepted`)
-- [ ] GitHub release is published with ZIP, DMG, blockmaps, and `latest-mac.yml` attached
+- [ ] Commit message matches the version tag
+- [ ] The correct `v<version>` tag is pushed to origin
