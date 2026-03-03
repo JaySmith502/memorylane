@@ -91,5 +91,8 @@ linux:
   category: Utility
 
 nsis:
+  # Keep the installer filename explicit so latest.yml and the published
+  # GitHub release asset name stay in sync.
+  artifactName: '${productName}-Setup.${ext}'
   oneClick: false
   allowToChangeInstallationDirectory: true

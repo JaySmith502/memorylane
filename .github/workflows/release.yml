@@ -155,9 +155,10 @@ jobs:
           retention-days: 3
           if-no-files-found: error
           path: |
-            dist/*.dmg
-            dist/*.zip
-            dist/*.blockmap
+            dist/MemoryLane-arm64-mac.dmg
+            dist/MemoryLane-arm64-mac.dmg.blockmap
+            dist/MemoryLane-arm64-mac.zip
+            dist/MemoryLane-arm64-mac.zip.blockmap
             dist/latest-mac.yml
 
   build-win:
@@ -199,8 +200,8 @@ jobs:
           retention-days: 3
           if-no-files-found: error
           path: |
-            dist/*.exe
-            dist/*.blockmap
+            dist/MemoryLane-Setup.exe
+            dist/MemoryLane-Setup.exe.blockmap
             dist/latest.yml
 
   publish-release:
@@ -234,12 +235,17 @@ jobs:
 
       - name: Verify release files
         run: |
-          test -f "release-assets/release-macos-${RELEASE_TAG}/MemoryLane-arm64-mac.dmg"
-          test -f "release-assets/release-macos-${RELEASE_TAG}/MemoryLane-arm64-mac.dmg.blockmap"
-          test -f "release-assets/release-macos-${RELEASE_TAG}/MemoryLane-arm64-mac.zip"
-          test -f "release-assets/release-macos-${RELEASE_TAG}/MemoryLane-arm64-mac.zip.blockmap"
-          test -f "release-assets/release-macos-${RELEASE_TAG}/latest-mac.yml"
-          test -f "release-assets/release-windows-${RELEASE_TAG}/latest.yml"
+          MAC_DIR="release-assets/release-macos-${RELEASE_TAG}"
+          WIN_DIR="release-assets/release-windows-${RELEASE_TAG}"
+
+          test -f "$MAC_DIR/MemoryLane-arm64-mac.dmg"
+          test -f "$MAC_DIR/MemoryLane-arm64-mac.dmg.blockmap"
+          test -f "$MAC_DIR/MemoryLane-arm64-mac.zip"
+          test -f "$MAC_DIR/MemoryLane-arm64-mac.zip.blockmap"
+          test -f "$MAC_DIR/latest-mac.yml"
+          test -f "$WIN_DIR/MemoryLane-Setup.exe"
+          test -f "$WIN_DIR/MemoryLane-Setup.exe.blockmap"
+          test -f "$WIN_DIR/latest.yml"
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
@@ -251,9 +257,11 @@ jobs:
           body_path: RELEASE_NOTES.md
           fail_on_unmatched_files: true
           files: |
-            release-assets/**/*.dmg
-            release-assets/**/*.zip
-            release-assets/**/*.exe
-            release-assets/**/*.blockmap
-            release-assets/**/latest.yml
-            release-assets/**/latest-mac.yml
+            release-assets/release-macos-${{ env.RELEASE_TAG }}/MemoryLane-arm64-mac.dmg
+            release-assets/release-macos-${{ env.RELEASE_TAG }}/MemoryLane-arm64-mac.dmg.blockmap
+            release-assets/release-macos-${{ env.RELEASE_TAG }}/MemoryLane-arm64-mac.zip
+            release-assets/release-macos-${{ env.RELEASE_TAG }}/MemoryLane-arm64-mac.zip.blockmap
+            release-assets/release-macos-${{ env.RELEASE_TAG }}/latest-mac.yml
+            release-assets/release-windows-${{ env.RELEASE_TAG }}/MemoryLane-Setup.exe
+            release-assets/release-windows-${{ env.RELEASE_TAG }}/MemoryLane-Setup.exe.blockmap
+            release-assets/release-windows-${{ env.RELEASE_TAG }}/latest.yml
