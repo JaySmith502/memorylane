@@ -189,3 +189,9 @@ Each captured screenshot provides:
 ## Multi-Agent Workflow
 
 Multiple agents may be working concurrently on the current branch. When committing changes, only stage and commit the files you personally modified — do not use `git add -A` or `git add .`.
+
+## Asking for estimates
+
+When asking questions like: "What would it take to implement X?" "How difficult would implementing X be?"
+Provide concrete steps that need doing and how much it complicates the codebase.
+NEVER provide vague time estimates like 2-3 days unless asked explicitly.
