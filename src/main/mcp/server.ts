@@ -11,12 +11,11 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { Writable } from 'node:stream'
 import * as fs from 'fs'
-import { ActivityProcessor } from '../processor/index'
 import { StorageService } from '../storage'
 import { EmbeddingService } from '../processor/embedding'
 import { getDefaultDbPath } from '../paths'
 import log from '../logger'
-import { registerTools } from './tools'
+import { registerTools, type MCPServices } from './tools'
 import { registerPrompts } from './prompts'
 
 const SERVER_NAME = 'memorylane'
@@ -75,10 +74,10 @@ sightings. Use after list_patterns or search_patterns.
 
 export class MemoryLaneMCPServer {
   private server: McpServer
-  private activityProcessor: ActivityProcessor | null = null
+  private services: MCPServices | null = null
 
-  constructor(activityProcessor?: ActivityProcessor) {
-    this.activityProcessor = activityProcessor || null
+  constructor(services?: MCPServices) {
+    this.services = services || null
     this.server = new McpServer(
       {
         name: SERVER_NAME,
@@ -93,7 +92,7 @@ export class MemoryLaneMCPServer {
       },
     )
 
-    registerTools(this.server, () => this.activityProcessor)
+    registerTools(this.server, () => this.services)
     registerPrompts(this.server)
   }
 
@@ -101,7 +100,7 @@ export class MemoryLaneMCPServer {
    * Initializes services if they haven't been injected.
    */
   private async initializeServices(dbPath?: string): Promise<void> {
-    if (this.activityProcessor) return
+    if (this.services) return
 
     // Use provided path or fall back to default
     const resolvedPath = dbPath || getDefaultDbPath()
@@ -114,12 +113,12 @@ export class MemoryLaneMCPServer {
 
       log.error(`Initializing services with DB path: ${resolvedPath}`)
 
-      const storageService = new StorageService(resolvedPath)
+      const storage = new StorageService(resolvedPath)
 
       const embeddingService = new EmbeddingService()
       await embeddingService.init()
 
-      this.activityProcessor = new ActivityProcessor(embeddingService, storageService)
+      this.services = { storage, embeddingService }
       log.error('Services initialized successfully')
     } catch (error) {
       log.error('Failed to initialize services:', error)

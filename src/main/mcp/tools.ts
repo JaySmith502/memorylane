@@ -1,7 +1,6 @@
 // eslint-disable-next-line import/no-unresolved
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { ActivityProcessor } from '../processor/index'
 import { parseTimeString } from './parse-time'
 import {
   formatTimelineEntry,
@@ -9,19 +8,22 @@ import {
   activityToTimelineEntry,
   TimelineEntry,
 } from './formatting'
-import type { PatternWithStats, PatternSighting } from '../storage'
+import type { StorageService, PatternWithStats, PatternSighting } from '../storage'
+import type { EmbeddingService } from '../processor/embedding'
 import log from '../logger'
+
+export interface MCPServices {
+  storage: StorageService
+  embeddingService: EmbeddingService
+}
 
 /**
  * Registers all MCP tools on the given server.
  *
  * @param server - The MCP server instance to register tools on.
- * @param getProcessor - Lazy accessor for the ActivityProcessor (may be null before initialization).
+ * @param getServices - Lazy accessor for services (may be null before initialization).
  */
-export function registerTools(
-  server: McpServer,
-  getProcessor: () => ActivityProcessor | null,
-): void {
+export function registerTools(server: McpServer, getServices: () => MCPServices | null): void {
   server.registerTool(
     'search_context',
     {
@@ -55,7 +57,7 @@ export function registerTools(
           ),
       },
     },
-    (params) => handleSearchContext(getProcessor(), params),
+    (params) => handleSearchContext(getServices(), params),
   )
 
   server.registerTool(
@@ -89,7 +91,7 @@ export function registerTools(
           ),
       },
     },
-    (params) => handleBrowseTimeline(getProcessor(), params),
+    (params) => handleBrowseTimeline(getServices(), params),
   )
 
   server.registerTool(
@@ -105,7 +107,7 @@ export function registerTools(
           .describe('Activity IDs to fetch (from search_context or browse_timeline results)'),
       },
     },
-    (params) => handleGetActivityDetails(getProcessor(), params),
+    (params) => handleGetActivityDetails(getServices(), params),
   )
 
   // ---------------------------------------------------------------------------
@@ -122,7 +124,7 @@ export function registerTools(
         'Use search_patterns for keyword filtering.',
       inputSchema: {},
     },
-    () => handleListPatterns(getProcessor()),
+    () => handleListPatterns(getServices()),
   )
 
   server.registerTool(
@@ -137,7 +139,7 @@ export function registerTools(
           .describe('Search keyword to match against pattern name, description, or apps'),
       },
     },
-    (params) => handleSearchPatterns(getProcessor(), params),
+    (params) => handleSearchPatterns(getServices(), params),
   )
 
   server.registerTool(
@@ -157,7 +159,7 @@ export function registerTools(
           .describe('Optional: filter sightings to a specific detection run ID'),
       },
     },
-    (params) => handleGetPatternDetails(getProcessor(), params),
+    (params) => handleGetPatternDetails(getServices(), params),
   )
 }
 
@@ -166,7 +168,7 @@ export function registerTools(
 // ---------------------------------------------------------------------------
 
 async function handleSearchContext(
-  processor: ActivityProcessor | null,
+  services: MCPServices | null,
   {
     query,
     limit,
@@ -181,12 +183,12 @@ async function handleSearchContext(
     appName?: string | undefined
   },
 ) {
-  if (!processor) {
+  if (!services) {
     return {
       content: [
         {
           type: 'text' as const,
-          text: 'Error: Processor is not initialized. The server cannot search the database.',
+          text: 'Error: Services not initialized. The server cannot search the database.',
         },
       ],
       isError: true,
@@ -223,7 +225,7 @@ async function handleSearchContext(
       }
     }
 
-    const storage = processor.getStorage()
+    const storage = services.storage
 
     // No query: fall back to chronological time-range listing
     if (!query) {
@@ -280,7 +282,7 @@ async function handleSearchContext(
     } catch (err) {
       log.warn('FTS search failed, falling back to vector-only:', err)
     }
-    const embedding = await processor.getEmbeddingService().generateEmbedding(query)
+    const embedding = await services.embeddingService.generateEmbedding(query)
     const vectorResults = storage.activities.searchVectors(embedding, effectiveLimit, filters)
 
     // Deduplicate: vector results first (preserves relevance order), then FTS extras
@@ -337,7 +339,7 @@ async function handleSearchContext(
 }
 
 async function handleBrowseTimeline(
-  processor: ActivityProcessor | null,
+  services: MCPServices | null,
   {
     startTime: startTimeStr,
     endTime: endTimeStr,
@@ -352,12 +354,12 @@ async function handleBrowseTimeline(
     sampling?: 'uniform' | 'recent_first' | undefined
   },
 ) {
-  if (!processor) {
+  if (!services) {
     return {
       content: [
         {
           type: 'text' as const,
-          text: 'Error: Processor is not initialized. The server cannot query the database.',
+          text: 'Error: Services not initialized. The server cannot query the database.',
         },
       ],
       isError: true,
@@ -392,7 +394,7 @@ async function handleBrowseTimeline(
       }
     }
 
-    const storage = processor.getStorage()
+    const storage = services.storage
     const activities = storage.activities.getByTimeRange(startTime, endTime, { appName })
     const entries = activities.map(activityToTimelineEntry)
 
@@ -458,13 +460,13 @@ function formatSightingLine(s: PatternSighting): string {
   return `- ${s.id} | ${time} | confidence: ${confidence} | run: ${s.runId}\n  Evidence: ${s.evidence}\n  Activity IDs: ${s.activityIds.join(', ')}`
 }
 
-async function handleListPatterns(processor: ActivityProcessor | null) {
-  if (!processor) {
+async function handleListPatterns(services: MCPServices | null) {
+  if (!services) {
     return {
       content: [
         {
           type: 'text' as const,
-          text: 'Error: Processor is not initialized. The server cannot query the database.',
+          text: 'Error: Services not initialized. The server cannot query the database.',
         },
       ],
       isError: true,
@@ -472,7 +474,7 @@ async function handleListPatterns(processor: ActivityProcessor | null) {
   }
 
   try {
-    const storage = processor.getStorage()
+    const storage = services.storage
     const patterns = storage.patterns.getAllPatterns()
     const count = storage.patterns.patternCount()
     const lastRun = storage.patterns.getLastRunTimestamp()
@@ -513,16 +515,13 @@ async function handleListPatterns(processor: ActivityProcessor | null) {
   }
 }
 
-async function handleSearchPatterns(
-  processor: ActivityProcessor | null,
-  { query }: { query: string },
-) {
-  if (!processor) {
+async function handleSearchPatterns(services: MCPServices | null, { query }: { query: string }) {
+  if (!services) {
     return {
       content: [
         {
           type: 'text' as const,
-          text: 'Error: Processor is not initialized. The server cannot query the database.',
+          text: 'Error: Services not initialized. The server cannot query the database.',
         },
       ],
       isError: true,
@@ -530,7 +529,7 @@ async function handleSearchPatterns(
   }
 
   try {
-    const storage = processor.getStorage()
+    const storage = services.storage
     const patterns = storage.patterns.searchPatterns(query)
 
     if (patterns.length === 0) {
@@ -569,15 +568,15 @@ async function handleSearchPatterns(
 }
 
 async function handleGetPatternDetails(
-  processor: ActivityProcessor | null,
+  services: MCPServices | null,
   { patternId, runId }: { patternId: string; runId?: string | undefined },
 ) {
-  if (!processor) {
+  if (!services) {
     return {
       content: [
         {
           type: 'text' as const,
-          text: 'Error: Processor is not initialized. The server cannot query the database.',
+          text: 'Error: Services not initialized. The server cannot query the database.',
         },
       ],
       isError: true,
@@ -585,7 +584,7 @@ async function handleGetPatternDetails(
   }
 
   try {
-    const storage = processor.getStorage()
+    const storage = services.storage
     const pattern = storage.patterns.getPatternById(patternId)
 
     if (!pattern) {
@@ -653,16 +652,13 @@ async function handleGetPatternDetails(
   }
 }
 
-async function handleGetActivityDetails(
-  processor: ActivityProcessor | null,
-  { ids }: { ids: string[] },
-) {
-  if (!processor) {
+async function handleGetActivityDetails(services: MCPServices | null, { ids }: { ids: string[] }) {
+  if (!services) {
     return {
       content: [
         {
           type: 'text' as const,
-          text: 'Error: Processor is not initialized. The server cannot query the database.',
+          text: 'Error: Services not initialized. The server cannot query the database.',
         },
       ],
       isError: true,
@@ -670,7 +666,7 @@ async function handleGetActivityDetails(
   }
 
   try {
-    const storage = processor.getStorage()
+    const storage = services.storage
     const activities = storage.activities.getByIds(ids)
 
     if (activities.length === 0) {
