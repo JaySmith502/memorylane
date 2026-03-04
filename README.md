@@ -1,6 +1,6 @@
 # MemoryLane
 
-[![Discord](https://img.shields.io/badge/Discord-Join%20our%20server-5865F2?logo=discord&logoColor=white)](https://discord.gg/qVbEWnNf)
+[![Discord](https://img.shields.io/badge/Discord-Join%20our%20server-5865F2?logo=discord&logoColor=white)](https://discord.gg/AHmURhKXdP)
 
 ## Installation
 
@@ -151,7 +151,7 @@ If you prefer local or self-hosted inference, you can now configure custom OpenA
 
 Questions, feedback, and feature ideas are welcome in our Discord server.
 
-[Join the MemoryLane Discord](https://discord.gg/qVbEWnNf)
+[Join the MemoryLane Discord](https://discord.gg/AHmURhKXdP)
 
 ## Star History
 
