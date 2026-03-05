@@ -45,11 +45,10 @@ memorylane get-db                         # Show resolved DB path
 
 ## Semantic search
 
-Vector search requires the optional `@huggingface/transformers` dependency:
+Vector search uses `@huggingface/transformers` (installed automatically as an optional dependency). If it failed to install on your platform, you can install it manually:
 
 ```bash
 npm install -g @huggingface/transformers
-memorylane search "what was I working on" --mode vector
 ```
 
 ## License
