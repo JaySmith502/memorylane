@@ -136,6 +136,30 @@ AI conversations are full of friction because LLMs have no context about you. Me
 
 If you prefer local or self-hosted inference, you can now configure custom OpenAI-compatible endpoints (for example Ollama). Cloud remains the default path for most users because it is faster and typically more accurate.
 
+## CLI
+
+A standalone CLI lets AI agents (Claude Code, Cursor, etc.) query your MemoryLane database without the Electron app running.
+
+```bash
+npm install -g @deusxmachina-dev/memorylane-cli
+memorylane set-db ~/Library/Application\ Support/MemoryLane/memorylane.db
+```
+
+Commands:
+
+```bash
+memorylane stats                          # Database statistics
+memorylane search "auth refactor"         # Full-text search
+memorylane search "auth" --mode vector    # Semantic search (requires @huggingface/transformers)
+memorylane timeline --limit 10            # Recent activities
+memorylane timeline --app Chrome          # Filter by app
+memorylane activity <id>                  # Activity details
+memorylane patterns                       # Detected patterns
+memorylane pattern <id>                   # Pattern details
+```
+
+The DB path is resolved in order: `--db-path` flag > `MEMORYLANE_DB_PATH` env var > saved config (`set-db`) > platform default.
+
 ## Build from Source
 
 1. Clone this repo
