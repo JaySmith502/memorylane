@@ -1,14 +1,14 @@
-# MemoryLane v0.13.8
+# MemoryLane v0.13.9
 
-Patch release centered on the first beta of Slack integration.
+Patch release focused on safer Slack semantic replies and configurable semantic timeout.
 
 ## What's Changed
 
-- **Slack integration beta** - added app settings for Slack polling, approvals, channel selection, and runtime controls
-- **Semantic Slack replies** - MemoryLane can now research recent activity, decide whether context is relevant, and draft short Slack replies before the normal approval flow
-- **Better Slack guardrails** - reply drafting now requires an OpenRouter key and skips low-confidence cases instead of posting weak output
-- **Minor fixes** - cleaned up missing activity video handling and tightened related tests and logging
+- **Slack safety guardrails** - semantic reply flow now classifies intent before research and blocks password, secret, and sensitive-topic requests
+- **Configurable LLM timeout** - semantic request timeout is now configurable (default `120s`) with clearer timeout wording in settings
+- **Slack setup docs** - added Slack app setup guide and a ready-to-paste manifest template
+- **Maintenance** - removed obsolete Claude GitHub Actions workflows
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v0.13.7...v0.13.8
+https://github.com/deusXmachina-dev/memorylane/compare/v0.13.8...v0.13.9
