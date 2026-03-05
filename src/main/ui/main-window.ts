@@ -114,7 +114,7 @@ export function openMainWindow(): void {
     },
   })
 
-  if (process.env.NODE_ENV === 'development') {
+  if (!app.isPackaged) {
     mainWindow.loadURL('http://localhost:5173/main-window.html')
   } else {
     mainWindow.loadFile(path.join(appRoot, 'out', 'renderer', 'main-window.html'))

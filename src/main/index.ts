@@ -6,6 +6,7 @@
  */
 
 import { app } from 'electron'
+import path from 'node:path'
 import { config as loadEnv } from 'dotenv'
 import {
   canSyncAutoStartSetting,
@@ -22,6 +23,7 @@ import { SlackSettingsManager } from './integrations/slack/settings-manager'
 import { SlackSemanticLayer } from './integrations/slack/semantic'
 import { PatternDetector } from './services/pattern-detector'
 import { createMainRuntime, type MainRuntime } from './runtime'
+import { getAppDirectoryName } from './paths'
 
 // Keep single-instance behavior in packaged app, but allow dev to run
 // alongside production for local debugging.
@@ -30,7 +32,9 @@ if (app.isPackaged && !app.requestSingleInstanceLock()) {
 }
 
 try {
-  loadEnv()
+  if (!app.isPackaged) {
+    loadEnv()
+  }
 } catch {
   // cwd might not be available in packaged app context — expected, we don't need .env there
 }
@@ -60,6 +64,13 @@ app.on('second-instance', () => {
 })
 
 app.on('ready', async () => {
+  if (!app.isPackaged) {
+    const devUserDataPath = path.join(app.getPath('appData'), getAppDirectoryName(true))
+    if (app.getPath('userData') !== devUserDataPath) {
+      app.setPath('userData', devUserDataPath)
+    }
+  }
+
   const startHidden = shouldStartHiddenOnLaunch()
 
   try {

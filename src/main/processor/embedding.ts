@@ -1,8 +1,8 @@
 import * as path from 'path'
-import * as os from 'os'
 import { pipeline, env } from '@huggingface/transformers'
 import log from '../logger'
 import type { ActivityEmbeddingService } from '../activity-transformer-types'
+import { getDefaultDbPath } from '../paths'
 
 // 'all-MiniLM-L6-v2' is a good balance of speed and quality for local embeddings.
 const MODEL_NAME = 'Xenova/all-MiniLM-L6-v2'
@@ -20,13 +20,7 @@ function getModelCacheDir(): string {
       // ELECTRON_RUN_AS_NODE or app not ready — fall through
     }
   }
-  if (process.platform === 'darwin') {
-    return path.join(os.homedir(), 'Library', 'Application Support', 'memorylane', 'models')
-  }
-  if (process.platform === 'win32') {
-    return path.join(process.env.APPDATA || os.homedir(), 'memorylane', 'models')
-  }
-  return path.join(os.homedir(), '.config', 'memorylane', 'models')
+  return path.join(path.dirname(getDefaultDbPath()), 'models')
 }
 
 env.cacheDir = getModelCacheDir()

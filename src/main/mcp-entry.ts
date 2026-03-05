@@ -25,15 +25,17 @@ const mcpStdout = new Writable({
 process.stdout.write = process.stderr.write.bind(process.stderr) as typeof process.stdout.write
 
 import { config as loadEnv } from 'dotenv'
+import { getDefaultDbPath, isPackagedElectronExecutable } from './paths'
 
 try {
-  loadEnv()
+  if (!isPackagedElectronExecutable(process.execPath)) {
+    loadEnv()
+  }
 } catch {
   // cwd might not be available in packaged app context
 }
 
 import { MemoryLaneMCPServer } from './mcp/server'
-import { getDefaultDbPath } from './paths'
 
 async function main(): Promise<void> {
   const server = new MemoryLaneMCPServer()

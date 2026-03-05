@@ -33,6 +33,6 @@ describe('fallback database paths', () => {
         'C:\\Users\\Example\\AppData\\Roaming',
         true,
       ),
-    ).toBe('C:\\Users\\Example\\AppData\\Roaming\\memorylane\\memorylane-dev.db')
+    ).toBe('C:\\Users\\Example\\AppData\\Roaming\\MemoryLane-dev\\memorylane-dev.db')
   })
 })
