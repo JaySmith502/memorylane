@@ -1,13 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { Slider } from '@components/ui/slider'
-import { Label } from '@components/ui/label'
-import { Button } from '@components/ui/button'
-import { Input } from '@components/ui/input'
-import { DatabaseExportSection } from './components/DatabaseExportSection'
-import { CustomEndpointSection } from './components/CustomEndpointSection'
-import { ManageKeySection } from './components/ManageKeySection'
-import { SlackIntegrationSection } from './components/SlackIntegrationSection'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import type {
   CaptureSettings,
@@ -16,85 +8,13 @@ import type {
   SemanticPipelineMode,
   SlackIntegrationStatus,
 } from '@types'
-import { detectHotkeyPlatform, formatHotkeyForDisplay, toRecordedAccelerator } from './hotkey-utils'
-
-function sliderVal(v: number | readonly number[]): number {
-  return typeof v === 'number' ? v : v[0]
-}
-
-function formatMs(ms: number): string {
-  if (ms < 1000) return `${ms}ms`
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1).replace(/\.0$/, '')}s`
-  return `${Math.round(ms / 60_000)}min`
-}
-
-function formatMinSec(ms: number): string {
-  const totalSeconds = Math.round(ms / 1000)
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  if (minutes === 0) return `${seconds}s`
-  return `${minutes}m ${seconds}s`
-}
-
-type SliderRowProps = {
-  label: string
-  value: number
-  min: number
-  max: number
-  step: number
-  format: (v: number) => string
-  onChange: (v: number) => void
-  onCommit: (v: number) => void
-}
-
-function SliderRow({
-  label,
-  value,
-  min,
-  max,
-  step,
-  format,
-  onChange,
-  onCommit,
-}: SliderRowProps): React.JSX.Element {
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between">
-        <Label className="text-xs text-muted-foreground">{label}</Label>
-        <span className="text-xs font-mono text-foreground tabular-nums">{format(value)}</span>
-      </div>
-      <Slider
-        value={[value]}
-        min={min}
-        max={max}
-        step={step}
-        onValueChange={(v) => onChange(sliderVal(v))}
-        onValueCommitted={(v) => onCommit(sliderVal(v))}
-      />
-    </div>
-  )
-}
-
-function SectionToggle({
-  label,
-  open,
-  onToggle,
-}: {
-  label: string
-  open: boolean
-  onToggle: () => void
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      className="flex w-full items-center gap-2 py-1 text-xs font-medium text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors"
-      onClick={onToggle}
-    >
-      <span className="text-[10px]">{open ? '\u25BC' : '\u25B6'}</span>
-      {label}
-    </button>
-  )
-}
+import { AppStartupSection } from './components/advanced-settings/AppStartupSection'
+import { CaptureSettingsSection } from './components/advanced-settings/CaptureSettingsSection'
+import { DataManagementSection } from './components/advanced-settings/DataManagementSection'
+import { LlmConfigurationSection } from './components/advanced-settings/LlmConfigurationSection'
+import { SlackSettingsSection } from './components/advanced-settings/SlackSettingsSection'
+import type { NumericCaptureSetting } from './components/advanced-settings/types'
+import { detectHotkeyPlatform, toRecordedAccelerator } from './hotkey-utils'
 
 export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.JSX.Element {
   const api = useMainWindowAPI()
@@ -144,42 +64,55 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
     [api],
   )
 
-  type NumericCaptureSetting = Exclude<
-    keyof CaptureSettings,
-    'autoStartEnabled' | 'semanticPipelineMode' | 'captureHotkeyAccelerator'
-  >
-
-  const set = (key: NumericCaptureSetting, value: number): void => {
+  const setNumericSetting = useCallback((key: NumericCaptureSetting, value: number): void => {
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev))
-  }
+  }, [])
 
-  const commit = (key: NumericCaptureSetting, value: number): void => {
-    if (!form) return
-    const next = { ...form, [key]: value }
-    setForm(next)
-    save({ [key]: value } as Pick<CaptureSettings, NumericCaptureSetting>)
-  }
+  const commitNumericSetting = useCallback(
+    (key: NumericCaptureSetting, value: number): void => {
+      setForm((prev) => (prev ? { ...prev, [key]: value } : prev))
+      save({ [key]: value } as Pick<CaptureSettings, NumericCaptureSetting>)
+    },
+    [save],
+  )
 
-  const setSemanticPipelineMode = (mode: SemanticPipelineMode): void => {
-    if (!form) return
-    const next = { ...form, semanticPipelineMode: mode }
-    setForm(next)
-    save({ semanticPipelineMode: mode })
-  }
+  const setSemanticPipelineMode = useCallback(
+    (mode: SemanticPipelineMode): void => {
+      setForm((prev) => (prev ? { ...prev, semanticPipelineMode: mode } : prev))
+      save({ semanticPipelineMode: mode })
+    },
+    [save],
+  )
 
-  const setAutoStartEnabled = (enabled: boolean): void => {
-    if (!form) return
-    const next = { ...form, autoStartEnabled: enabled }
-    setForm(next)
-    save(
-      { autoStartEnabled: enabled },
-      enabled ? 'Launch at login enabled' : 'Launch at login disabled',
-    )
-  }
+  const setAutoStartEnabled = useCallback(
+    (enabled: boolean): void => {
+      setForm((prev) => (prev ? { ...prev, autoStartEnabled: enabled } : prev))
+      save(
+        { autoStartEnabled: enabled },
+        enabled ? 'Launch at login enabled' : 'Launch at login disabled',
+      )
+    },
+    [save],
+  )
 
-  const setCaptureHotkeyAccelerator = (value: string): void => {
+  const setCaptureHotkeyAccelerator = useCallback((value: string): void => {
     setForm((prev) => (prev ? { ...prev, captureHotkeyAccelerator: value } : prev))
-  }
+  }, [])
+
+  const refreshKeyStatus = useCallback(async (): Promise<void> => {
+    const status = await api.getKeyStatus()
+    setKeyStatus(status)
+  }, [api])
+
+  const refreshEndpointStatus = useCallback(async (): Promise<void> => {
+    const status = await api.getCustomEndpoint()
+    setEndpointStatus(status)
+  }, [api])
+
+  const handleReset = useCallback(async (): Promise<void> => {
+    await api.resetCaptureSettings()
+    await load()
+  }, [api, load])
 
   useEffect(() => {
     if (!recordingHotkey) return
@@ -225,14 +158,7 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
     }
   }, [api, load, recordingHotkey, setCaptureHotkeyAccelerator])
 
-  const hotkeyPrimaryModifier = hotkeyPlatform === 'mac' ? 'Cmd' : 'Ctrl'
-  const hotkeyAltModifier = hotkeyPlatform === 'mac' ? 'Option' : 'Alt'
-
-  const handleReset = async (): Promise<void> => {
-    await api.resetCaptureSettings()
-    await load()
-  }
-
+  // Keep section UI in dedicated components; this file handles data loading and wiring.
   return (
     <div className="p-6 max-w-xl mx-auto space-y-4 overflow-y-auto max-h-screen">
       <button
@@ -242,304 +168,59 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
         ← Back
       </button>
 
-      {/* ── LLM Configuration ── */}
-      <section>
-        <SectionToggle
-          label="LLM Configuration"
-          open={llmOpen}
-          onToggle={() => setLlmOpen((v) => !v)}
-        />
-        {llmOpen && (
-          <div className="mt-3 space-y-3">
-            {keyStatus && !endpointStatus?.enabled && (
-              <ManageKeySection
-                api={api}
-                keyStatus={keyStatus}
-                onKeyDeleted={() => void api.getKeyStatus().then(setKeyStatus)}
-                onKeyUpdated={() => void api.getKeyStatus().then(setKeyStatus)}
-              />
-            )}
-            {endpointStatus && (
-              <>
-                {keyStatus && !endpointStatus.enabled && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <div className="flex-1 h-px bg-border" />
-                    <span>or</span>
-                    <div className="flex-1 h-px bg-border" />
-                  </div>
-                )}
-                <CustomEndpointSection
-                  api={api}
-                  endpointStatus={endpointStatus}
-                  onEndpointChanged={() => void api.getCustomEndpoint().then(setEndpointStatus)}
-                />
-              </>
-            )}
-          </div>
-        )}
-      </section>
+      <LlmConfigurationSection
+        api={api}
+        open={llmOpen}
+        onToggle={() => setLlmOpen((v) => !v)}
+        keyStatus={keyStatus}
+        endpointStatus={endpointStatus}
+        onKeyStatusChanged={() => void refreshKeyStatus()}
+        onEndpointStatusChanged={() => void refreshEndpointStatus()}
+      />
 
       <div className="border-t border-border" />
 
       {form && (
         <>
-          <section>
-            <SectionToggle
-              label="App Startup"
-              open={startupOpen}
-              onToggle={() => setStartupOpen((v) => !v)}
-            />
-            {startupOpen && (
-              <div className="mt-3 space-y-3">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground">
-                        Should the app start on login?
-                      </p>
-                    </div>
-                    <div className="grid shrink-0 grid-cols-2 gap-2">
-                      <Button
-                        variant={form.autoStartEnabled ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setAutoStartEnabled(true)}
-                      >
-                        On
-                      </Button>
-                      <Button
-                        variant={!form.autoStartEnabled ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setAutoStartEnabled(false)}
-                      >
-                        Off
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </section>
+          <AppStartupSection
+            open={startupOpen}
+            onToggle={() => setStartupOpen((v) => !v)}
+            autoStartEnabled={form.autoStartEnabled}
+            onAutoStartEnabledChange={setAutoStartEnabled}
+          />
 
           <div className="border-t border-border" />
         </>
       )}
 
-      {/* ── Data Management ── */}
-      <section>
-        <SectionToggle
-          label="Data Management"
-          open={dataOpen}
-          onToggle={() => setDataOpen((v) => !v)}
-        />
-        {dataOpen && (
-          <div className="mt-3">
-            <DatabaseExportSection api={api} />
-          </div>
-        )}
-      </section>
+      <DataManagementSection api={api} open={dataOpen} onToggle={() => setDataOpen((v) => !v)} />
 
       {form && (
         <>
           <div className="border-t border-border" />
 
-          <section>
-            <SectionToggle
-              label="Slack Integration"
-              open={slackOpen}
-              onToggle={() => setSlackOpen((value) => !value)}
-            />
-            {slackOpen && slackStatus && (
-              <div className="mt-3">
-                <SlackIntegrationSection
-                  api={api}
-                  status={slackStatus}
-                  onChanged={() => void load()}
-                />
-              </div>
-            )}
-          </section>
+          <SlackSettingsSection
+            api={api}
+            open={slackOpen}
+            onToggle={() => setSlackOpen((value) => !value)}
+            status={slackStatus}
+            onChanged={() => void load()}
+          />
 
           <div className="border-t border-border" />
 
-          {/* ── Capture Settings ── */}
-          <section>
-            <SectionToggle
-              label="Capture Settings"
-              open={captureOpen}
-              onToggle={() => setCaptureOpen((v) => !v)}
-            />
-            {captureOpen && (
-              <div className="mt-3 space-y-5">
-                {/* Semantic Media Pipeline */}
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    Semantic Media Pipeline
-                  </p>
-                  <div className="grid grid-cols-3 gap-2">
-                    <Button
-                      variant={form.semanticPipelineMode === 'auto' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setSemanticPipelineMode('auto')}
-                    >
-                      Auto
-                    </Button>
-                    <Button
-                      variant={form.semanticPipelineMode === 'video' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setSemanticPipelineMode('video')}
-                    >
-                      Video only
-                    </Button>
-                    <Button
-                      variant={form.semanticPipelineMode === 'image' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setSemanticPipelineMode('image')}
-                    >
-                      Image only
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {form.semanticPipelineMode === 'auto'
-                      ? 'Tries video first, then falls back to images when needed.'
-                      : form.semanticPipelineMode === 'video'
-                        ? 'Uses only the video pipeline and never falls back to images.'
-                        : 'Uses only image snapshots and skips video requests.'}
-                  </p>
-                  <SliderRow
-                    label="LLM request timeout"
-                    value={form.semanticRequestTimeoutMs}
-                    min={15_000}
-                    max={300_000}
-                    step={5_000}
-                    format={formatMinSec}
-                    onChange={(v) => set('semanticRequestTimeoutMs', v)}
-                    onCommit={(v) => commit('semanticRequestTimeoutMs', v)}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <Label className="text-xs font-medium text-muted-foreground sm:w-24 sm:shrink-0">
-                      Capture Hotkey
-                    </Label>
-                    <div className="flex flex-1 items-center gap-2">
-                      <Input
-                        value={formatHotkeyForDisplay(
-                          form.captureHotkeyAccelerator,
-                          hotkeyPlatform,
-                        )}
-                        readOnly
-                      />
-                      <Button
-                        type="button"
-                        variant={recordingHotkey ? 'destructive' : 'outline'}
-                        size="sm"
-                        onClick={() => setRecordingHotkey((current) => !current)}
-                      >
-                        {recordingHotkey ? 'Cancel' : 'Record'}
-                      </Button>
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {recordingHotkey
-                      ? 'Press your key combination now (Esc to cancel).'
-                      : `Example: ${hotkeyPrimaryModifier}+Shift+M or ${hotkeyPrimaryModifier}+${hotkeyAltModifier}+P`}
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <SliderRow
-                    label="Visual change sensitivity"
-                    value={form.visualThreshold}
-                    min={1}
-                    max={20}
-                    step={1}
-                    format={(v) =>
-                      `${v}% — ${v <= 5 ? 'more captures' : v >= 15 ? 'fewer captures' : 'balanced'}`
-                    }
-                    onChange={(v) => set('visualThreshold', v)}
-                    onCommit={(v) => commit('visualThreshold', v)}
-                  />
-                </div>
-
-                {/* Interaction Timeouts */}
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Interaction Timeouts</p>
-                  <SliderRow
-                    label="Typing debounce"
-                    value={form.typingDebounceMs}
-                    min={500}
-                    max={10000}
-                    step={100}
-                    format={formatMs}
-                    onChange={(v) => set('typingDebounceMs', v)}
-                    onCommit={(v) => commit('typingDebounceMs', v)}
-                  />
-                  <SliderRow
-                    label="Scroll debounce"
-                    value={form.scrollDebounceMs}
-                    min={200}
-                    max={5000}
-                    step={100}
-                    format={formatMs}
-                    onChange={(v) => set('scrollDebounceMs', v)}
-                    onCommit={(v) => commit('scrollDebounceMs', v)}
-                  />
-                  <SliderRow
-                    label="Click debounce"
-                    value={form.clickDebounceMs}
-                    min={500}
-                    max={10000}
-                    step={100}
-                    format={formatMs}
-                    onChange={(v) => set('clickDebounceMs', v)}
-                    onCommit={(v) => commit('clickDebounceMs', v)}
-                  />
-                </div>
-
-                {/* Activity Windows */}
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Activity Windows</p>
-                  <SliderRow
-                    label="Minimum activity duration"
-                    value={form.minActivityDurationMs}
-                    min={1000}
-                    max={30000}
-                    step={1000}
-                    format={formatMs}
-                    onChange={(v) => set('minActivityDurationMs', v)}
-                    onCommit={(v) => commit('minActivityDurationMs', v)}
-                  />
-                  <SliderRow
-                    label="Maximum activity duration"
-                    value={form.maxActivityDurationMs}
-                    min={60000}
-                    max={1800000}
-                    step={60000}
-                    format={formatMs}
-                    onChange={(v) => set('maxActivityDurationMs', v)}
-                    onCommit={(v) => commit('maxActivityDurationMs', v)}
-                  />
-                  <SliderRow
-                    label="Max screenshots for LLM"
-                    value={form.maxScreenshotsForLlm}
-                    min={1}
-                    max={20}
-                    step={1}
-                    format={(v) => `${v}`}
-                    onChange={(v) => set('maxScreenshotsForLlm', v)}
-                    onCommit={(v) => commit('maxScreenshotsForLlm', v)}
-                  />
-                </div>
-
-                <div className="flex justify-end">
-                  <Button variant="ghost" size="sm" onClick={() => void handleReset()}>
-                    Reset to defaults
-                  </Button>
-                </div>
-              </div>
-            )}
-          </section>
+          <CaptureSettingsSection
+            open={captureOpen}
+            onToggle={() => setCaptureOpen((v) => !v)}
+            form={form}
+            hotkeyPlatform={hotkeyPlatform}
+            recordingHotkey={recordingHotkey}
+            onToggleRecordingHotkey={() => setRecordingHotkey((current) => !current)}
+            onSemanticPipelineModeChange={setSemanticPipelineMode}
+            onSettingChange={setNumericSetting}
+            onSettingCommit={commitNumericSetting}
+            onReset={() => void handleReset()}
+          />
         </>
       )}
     </div>
