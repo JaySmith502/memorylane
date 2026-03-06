@@ -1,6 +1,6 @@
 import { tool } from '@openrouter/sdk'
 import { z } from 'zod'
-import type { ActivityRepository , StoredActivity } from '../../../storage'
+import type { ActivityRepository, StoredActivity } from '../../../storage'
 import { parseTimeString } from '../../../mcp/parse-time'
 import {
   activityToTimelineEntry,
