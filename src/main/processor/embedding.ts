@@ -1,20 +1,20 @@
-import * as path from 'path'
 import { pipeline, env } from '@huggingface/transformers'
 import log from '../logger'
 import type { ActivityEmbeddingService } from '../activity-transformer-types'
-import { getDefaultDbPath } from '../paths'
+import { getBundledModelPath, getModelCacheDir } from '../paths'
 
 // 'all-MiniLM-L6-v2' is a good balance of speed and quality for local embeddings.
 const MODEL_NAME = 'Xenova/all-MiniLM-L6-v2'
 
-// Use an absolute cache path under the app's data directory.
-// A relative path like './.cache' breaks when the cwd is '/' (macOS launches
-// packaged apps with cwd='/'), causing ENOENT on mkdir.
-function getModelCacheDir(): string {
-  return path.join(path.dirname(getDefaultDbPath()), 'models')
+const bundledPath = getBundledModelPath()
+if (bundledPath) {
+  env.localModelPath = bundledPath
+  env.allowRemoteModels = false
+  log.info(`Using bundled embedding model from ${bundledPath}`)
+} else {
+  env.cacheDir = getModelCacheDir()
+  log.info(`Using remote embedding model from ${env.cacheDir}`)
 }
-
-env.cacheDir = getModelCacheDir()
 
 export class EmbeddingService implements ActivityEmbeddingService {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
