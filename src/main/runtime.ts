@@ -46,8 +46,9 @@ export async function createMainRuntime(params?: {
   const apiKeyManager = new ApiKeyManager()
   const customEndpointManager = new CustomEndpointManager()
   const dev = !app.isPackaged
+  const userDataPath = app.getPath('userData')
   const dbFile = dev ? 'memorylane-dev.db' : 'memorylane.db'
-  const dbPath = path.join(app.getPath('userData'), dbFile)
+  const dbPath = path.join(userDataPath, dbFile)
   const storage = new StorageService(dbPath)
   applyMigrations(storage.getDatabase())
   const usageTracker = new UsageTracker()
@@ -76,8 +77,14 @@ export async function createMainRuntime(params?: {
       : undefined,
   })
 
-  const outputDir = path.join(app.getPath('userData'), 'screenshots')
+  const outputDir = path.join(userDataPath, 'screenshots')
   fs.mkdirSync(outputDir, { recursive: true })
+  const activityCount = storage.activities.count()
+
+  log.info(
+    `[Runtime] Persistence targets: mode=${dev ? 'dev' : 'packaged'} ` +
+      `userData=${userDataPath} db=${dbPath} screenshots=${outputDir} activityCount=${activityCount}`,
+  )
 
   const transformer = new DefaultActivityTransformer(
     new FfmpegVideoStitcher(),
