@@ -129,6 +129,7 @@ Desktop.ini
 playground/
 
 # Debug pipeline output (dev only)
+.debug-app-watcher/
 .debug-app-watcher-win/
 .debug-pipeline/
 debug-pipeline/

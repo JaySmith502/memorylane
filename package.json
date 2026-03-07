@@ -33,6 +33,7 @@
     "test:integration:semantic:ollama": "cross-env RUN_SEMANTIC_OLLAMA_INTEGRATION=1 node ./scripts/enode.js ./node_modules/vitest/vitest.mjs src/main/activity-semantic-service.ollama.integration.test.ts",
     "postinstall": "electron-builder install-app-deps",
     "prepare": "husky",
+    "debug:app-watcher": "node ./scripts/enode.js ./node_modules/.bin/tsx scripts/app-watcher-dump.ts",
     "db:search": "node ./scripts/enode.js ./node_modules/.bin/tsx scripts/db-search.ts",
     "db:stats": "node ./scripts/enode.js ./node_modules/.bin/tsx scripts/db-stats.ts",
     "db:explore": "jupyter notebook tools/explore-db.ipynb",
