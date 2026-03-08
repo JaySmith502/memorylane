@@ -165,7 +165,8 @@ The DB path is resolved in order: `--db-path` flag > `MEMORYLANE_DB_PATH` env va
 1. Clone this repo
 2. `npm install`
 3. `npm run dev` to start in development mode
-4. See [CLAUDE.md](CLAUDE.md) for full development commands and architecture details
+4. See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for setup, testing, and manual validation guidance
+5. See [CLAUDE.md](CLAUDE.md) for full development commands and architecture details
 
 ## Limitations
 

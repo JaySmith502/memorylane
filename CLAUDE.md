@@ -7,6 +7,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Keep user-facing text in repo files (release notes, README) and the application (React UI) brief and to the point.
 - Prefer the shortest complete wording; remove repeated context and optional detail unless it improves clarity.
 
+## Contributor Guide
+
+- For local setup, test commands, permission checks, and endpoint/storage gotchas, see `docs/CONTRIBUTING.md`.
+
 ## Project Overview
 
 MemoryLane is a system tray Electron application that captures screenshots at regular intervals. Built with TypeScript using electron-vite for development and electron-builder for packaging. The application runs as a tray-only app (no main window) and captures screenshots based on user interaction and visual changes.
