@@ -638,6 +638,82 @@ describe('ActivitySemanticService', () => {
     expect(mockOpenAICreate).toHaveBeenCalledTimes(1)
   })
 
+  it('cache-skips video after OpenAI 422 details expose input_video as unsupported', async () => {
+    const tempDir = createTempDir()
+    tempDirs.push(tempDir)
+    const videoPath = createVideoFile(tempDir)
+    const frames = [
+      makeFrame(createImageFile(tempDir, 'f0.png'), 1_000, 0),
+      makeFrame(createImageFile(tempDir, 'f1.png'), 25_000, 1),
+    ]
+
+    mockOpenAICreate.mockImplementationOnce(async () => {
+      const error = new Error('422 invalid input error')
+      Object.assign(error, {
+        error: {
+          code: 'Invalid input',
+          message: 'invalid input error',
+          details: [
+            {
+              loc: [
+                'body',
+                'messages',
+                0,
+                'content',
+                'list[function-after[validate_content_part(), ContentPart]]',
+                1,
+                'type',
+              ],
+              msg: "Input should be 'text', 'image' or 'image_url'",
+              input: 'input_video',
+              ctx: { expected: "'text', 'image' or 'image_url'" },
+            },
+          ],
+        },
+      })
+      throw error
+    })
+    mockOpenAICreate.mockResolvedValue(response('snapshot summary after cached skip'))
+
+    const service = new ActivitySemanticService(undefined, {
+      endpointConfig: {
+        serverURL: 'https://example.test/openai/v1',
+        model: 'mistral-small-2503',
+      },
+      usageTracker: { recordUsage: vi.fn() },
+    })
+
+    const firstResult = await service.summarizeFromVideo({
+      activity: makeActivity({ id: 'activity-1', frames }),
+      videoPath,
+      ocrText: 'ignored',
+    })
+    expect(firstResult).toBe('snapshot summary after cached skip')
+
+    mockOpenAICreate.mockClear()
+    mockOpenAICreate.mockResolvedValue(response('snapshot summary after cached skip'))
+
+    const secondResult = await service.summarizeFromVideo({
+      activity: makeActivity({ id: 'activity-2', frames }),
+      videoPath,
+      ocrText: 'ignored',
+    })
+
+    expect(secondResult).toBe('snapshot summary after cached skip')
+    expect(mockOpenAICreate).toHaveBeenCalledTimes(1)
+    expect(
+      mockOpenAICreate.mock.calls[0][0].messages[0].content.some(
+        (item: { type: string }) => item.type === 'input_video',
+      ),
+    ).toBe(false)
+
+    const secondDiagnostics = service.getLastRunDiagnostics()
+    expect(secondDiagnostics?.attempts.map((attempt) => attempt.mode)).toEqual(['snapshot'])
+    expect(secondDiagnostics?.fallbackReason).toBe(
+      'custom endpoint model marked video-unsupported (session)',
+    )
+  })
+
   it('skips video on subsequent calls after custom model reports video unsupported', async () => {
     const tempDir = createTempDir()
     tempDirs.push(tempDir)
