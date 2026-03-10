@@ -2,7 +2,7 @@
 
 ## 1. Install the plugin
 
-[![Installation walkthrough](https://cdn.loom.com/sessions/thumbnails/3ea0319a862f482a8b53849ba5c14418-with-play.gif)](https://www.loom.com/share/3ea0319a862f482a8b53849ba5c14418)
+Watch the [installation walkthrough](https://www.loom.com/share/3ea0319a862f482a8b53849ba5c14418).
 
 Install from the GitHub Marketplace:
 
@@ -16,7 +16,7 @@ If you have the **MemoryLane desktop app** installed, just add the MCP server th
 
 If you don't have the desktop app, follow the steps below.
 
-[![MCP setup walkthrough](https://cdn.loom.com/sessions/thumbnails/b6330ba741654a87bc9875105c973daa-with-play.gif)](https://www.loom.com/share/b6330ba741654a87bc9875105c973daa)
+Watch the [MCP setup walkthrough](https://www.loom.com/share/b6330ba741654a87bc9875105c973daa).
 
 1. Open the config file:
 
