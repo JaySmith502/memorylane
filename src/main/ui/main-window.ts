@@ -271,7 +271,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       }
       try {
         deps.customEndpointManager.saveEndpoint(config)
-        deps.semanticService.updateEndpoint(config)
+        deps.semanticService.updateEndpoint(deps.customEndpointManager.getEndpoint())
         return { success: true }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'

@@ -23,6 +23,11 @@ export class CustomEndpointManager {
    * The optional API key is encrypted via safeStorage; serverURL and model are plaintext.
    */
   public saveEndpoint(config: CustomEndpointConfig): void {
+    const shouldPreserveApiKey = config.apiKey === undefined
+    const existingStored = shouldPreserveApiKey ? this.readStoredConfig(false) : null
+    const previousConfig = shouldPreserveApiKey
+      ? (this.cached ?? this.toEndpointConfig(existingStored, false))
+      : null
     const stored: StoredConfig = {
       serverURL: config.serverURL,
       model: config.model,
@@ -34,10 +39,14 @@ export class CustomEndpointManager {
       }
       const encrypted = safeStorage.encryptString(config.apiKey)
       stored.encryptedApiKey = encrypted.toString('base64')
+    } else if (existingStored?.encryptedApiKey) {
+      stored.encryptedApiKey = existingStored.encryptedApiKey
     }
 
     fs.writeFileSync(this.configPath, JSON.stringify(stored, null, 2))
-    this.cached = { ...config }
+    this.cached = previousConfig?.apiKey
+      ? { ...config, apiKey: config.apiKey ?? previousConfig.apiKey }
+      : { ...config }
     log.info('[CustomEndpointManager] Endpoint saved')
   }
 
@@ -49,34 +58,11 @@ export class CustomEndpointManager {
       return { ...this.cached }
     }
 
-    if (!fs.existsSync(this.configPath)) {
-      return null
-    }
-
-    try {
-      const data = fs.readFileSync(this.configPath, 'utf-8')
-      const stored: StoredConfig = JSON.parse(data)
-
-      const config: CustomEndpointConfig = {
-        serverURL: stored.serverURL,
-        model: stored.model,
-      }
-
-      if (stored.encryptedApiKey) {
-        if (!safeStorage.isEncryptionAvailable()) {
-          log.warn('[CustomEndpointManager] Secure storage not available, cannot decrypt API key')
-        } else {
-          const buf = Buffer.from(stored.encryptedApiKey, 'base64')
-          config.apiKey = safeStorage.decryptString(buf)
-        }
-      }
-
-      this.cached = config
-      return { ...config }
-    } catch (error) {
-      log.error('[CustomEndpointManager] Error reading config:', error)
-      return null
-    }
+    const stored = this.readStoredConfig()
+    const config = this.toEndpointConfig(stored)
+    if (!config) return null
+    this.cached = config
+    return { ...config }
   }
 
   /**
@@ -104,5 +90,48 @@ export class CustomEndpointManager {
       model: config.model,
       hasApiKey: !!config.apiKey,
     }
+  }
+
+  private readStoredConfig(logErrors = true): StoredConfig | null {
+    if (!fs.existsSync(this.configPath)) {
+      return null
+    }
+
+    try {
+      const data = fs.readFileSync(this.configPath, 'utf-8')
+      return JSON.parse(data) as StoredConfig
+    } catch (error) {
+      if (logErrors) {
+        log.error('[CustomEndpointManager] Error reading config:', error)
+      }
+      return null
+    }
+  }
+
+  private toEndpointConfig(
+    stored: StoredConfig | null,
+    logWarnings = true,
+  ): CustomEndpointConfig | null {
+    if (!stored) {
+      return null
+    }
+
+    const config: CustomEndpointConfig = {
+      serverURL: stored.serverURL,
+      model: stored.model,
+    }
+
+    if (stored.encryptedApiKey) {
+      if (!safeStorage.isEncryptionAvailable()) {
+        if (logWarnings) {
+          log.warn('[CustomEndpointManager] Secure storage not available, cannot decrypt API key')
+        }
+      } else {
+        const buf = Buffer.from(stored.encryptedApiKey, 'base64')
+        config.apiKey = safeStorage.decryptString(buf)
+      }
+    }
+
+    return config
   }
 }

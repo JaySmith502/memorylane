@@ -80,6 +80,33 @@ describe('CustomEndpointManager', () => {
     expect(config!.apiKey).toBeUndefined()
   })
 
+  it('preserves an existing API key when updating other endpoint fields', () => {
+    let writtenData = ''
+    vi.mocked(fs.writeFileSync).mockImplementation((_path, data) => {
+      writtenData = data as string
+    })
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+    vi.mocked(fs.readFileSync).mockImplementation(() => writtenData)
+
+    manager.saveEndpoint({
+      serverURL: 'http://localhost:11434/v1',
+      model: 'llama3.2-vision',
+      apiKey: 'my-secret-key',
+    })
+
+    manager.saveEndpoint({
+      serverURL: 'http://foo:4332/v1',
+      model: 'moondream:latest',
+    })
+
+    manager = new CustomEndpointManager()
+    const config = manager.getEndpoint()
+    expect(config).not.toBeNull()
+    expect(config!.serverURL).toBe('http://foo:4332/v1')
+    expect(config!.model).toBe('moondream:latest')
+    expect(config!.apiKey).toBe('my-secret-key')
+  })
+
   it('should return null when no config exists', () => {
     vi.mocked(fs.existsSync).mockReturnValue(false)
 

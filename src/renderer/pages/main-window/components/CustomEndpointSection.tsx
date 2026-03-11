@@ -35,6 +35,22 @@ export function CustomEndpointSection({
 
   const showForm = editing || !endpointStatus.enabled
 
+  const populateFormFromEndpoint = useCallback(() => {
+    setServerURL(endpointStatus.serverURL ?? '')
+    setModel(endpointStatus.model ?? '')
+    setApiKey('')
+  }, [endpointStatus.model, endpointStatus.serverURL])
+
+  const startEditing = useCallback(() => {
+    populateFormFromEndpoint()
+    setEditing(true)
+  }, [populateFormFromEndpoint])
+
+  const cancelEditing = useCallback(() => {
+    populateFormFromEndpoint()
+    setEditing(false)
+  }, [populateFormFromEndpoint])
+
   const handleSave = useCallback(async () => {
     const url = serverURL.trim()
     const modelName = model.trim()
@@ -57,8 +73,8 @@ export function CustomEndpointSection({
       const config = { serverURL: url, model: modelName, apiKey: apiKey.trim() || undefined }
       const result = await api.saveCustomEndpoint(config)
       if (result.success) {
-        setServerURL('')
-        setModel('')
+        setServerURL(url)
+        setModel(modelName)
         setApiKey('')
         setEditing(false)
         toast.success('Custom endpoint saved')
@@ -76,6 +92,9 @@ export function CustomEndpointSection({
     try {
       const result = await api.deleteCustomEndpoint()
       if (result.success) {
+        setServerURL('')
+        setModel('')
+        setApiKey('')
         setEditing(false)
         toast.success('Custom endpoint removed')
         onEndpointChanged()
@@ -114,7 +133,7 @@ export function CustomEndpointSection({
             )}
           </div>
           <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+            <Button variant="ghost" size="sm" onClick={() => startEditing()}>
               Change
             </Button>
             <Button
@@ -149,7 +168,11 @@ export function CustomEndpointSection({
           />
           <Input
             type="password"
-            placeholder="API key (optional)"
+            placeholder={
+              endpointStatus.hasApiKey
+                ? 'Leave blank to keep the current API key'
+                : 'API key (optional)'
+            }
             autoComplete="off"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
@@ -166,7 +189,7 @@ export function CustomEndpointSection({
               {saving ? 'Saving...' : 'Save Endpoint'}
             </Button>
             {endpointStatus.enabled && (
-              <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
+              <Button variant="ghost" size="sm" onClick={() => cancelEditing()}>
                 Cancel
               </Button>
             )}
