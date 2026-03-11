@@ -21,6 +21,7 @@ import type { CustomEndpointManager } from '../settings/custom-endpoint-manager'
 import type { ManagedKeyService } from '../services/managed-key-service'
 import type {
   CustomEndpointConfig,
+  LlmHealthStatus,
   MainWindowStatus,
   MainWindowStats,
   CaptureSettings,
@@ -37,6 +38,8 @@ interface SemanticService {
   updateEndpoint(config: CustomEndpointConfig | null, openRouterKey?: string | null): void
   updatePipelinePreference(preference: SemanticPipelineMode): void
   updateRequestTimeoutMs(timeoutMs: number): void
+  getLlmHealthStatus(): LlmHealthStatus
+  testConnection(): Promise<void>
 }
 
 interface MainWindowDependencies {
@@ -229,6 +232,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     try {
       deps.apiKeyManager.saveApiKey(key)
       deps.semanticService.updateApiKey(key)
+      void deps.semanticService.testConnection()
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -263,6 +267,24 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     return deps.customEndpointManager.getStatus()
   })
 
+  ipcMain.handle('main-window:getLlmHealth', () => {
+    if (!deps) {
+      return {
+        configured: false,
+        state: 'not_configured',
+        consecutiveFailures: 0,
+        lastError: null,
+        lastAttemptAt: null,
+      }
+    }
+    return deps.semanticService.getLlmHealthStatus()
+  })
+
+  ipcMain.handle('main-window:testLlmConnection', async () => {
+    if (!deps) return
+    await deps.semanticService.testConnection()
+  })
+
   ipcMain.handle(
     'main-window:saveCustomEndpoint',
     (_event: IpcMainInvokeEvent, config: CustomEndpointConfig) => {
@@ -272,6 +294,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       try {
         deps.customEndpointManager.saveEndpoint(config)
         deps.semanticService.updateEndpoint(deps.customEndpointManager.getEndpoint())
+        void deps.semanticService.testConnection()
         return { success: true }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'

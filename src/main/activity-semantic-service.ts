@@ -6,6 +6,7 @@ export type {
   type SemanticEndpointConfig,
   type SemanticPipelinePreference,
   type SemanticAttempt,
+  type LlmHealthStatus,
   type SemanticRoundTripDump,
   type SemanticRunDiagnostics,
 } from './semantic/types'

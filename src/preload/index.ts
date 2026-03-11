@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   saveCustomEndpoint: (config: { serverURL: string; model: string; apiKey?: string }) =>
     ipcRenderer.invoke('main-window:saveCustomEndpoint', config),
   deleteCustomEndpoint: () => ipcRenderer.invoke('main-window:deleteCustomEndpoint'),
+  getLlmHealth: () => ipcRenderer.invoke('main-window:getLlmHealth'),
+  testLlmConnection: () => ipcRenderer.invoke('main-window:testLlmConnection'),
   // Slack integration
   getSlackSettings: () => ipcRenderer.invoke('main-window:getSlackSettings'),
   saveSlackSettings: (config: {

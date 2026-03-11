@@ -114,3 +114,11 @@ export interface SemanticRoundTripDump {
 export interface SemanticDebugDumper {
   dumpRoundTrip(input: SemanticRoundTripDump): void
 }
+
+export interface LlmHealthStatus {
+  configured: boolean
+  state: 'not_configured' | 'unknown' | 'active' | 'failing'
+  consecutiveFailures: number
+  lastError: string | null
+  lastAttemptAt: number | null
+}

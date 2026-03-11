@@ -412,6 +412,13 @@ describe('ActivitySemanticService', () => {
     expect(result).toBe('video summary')
     expect(send).toHaveBeenCalledTimes(1)
     expect(send.mock.calls[0][0].model).toBe(DEFAULT_VIDEO_MODELS[0])
+    expect(service.getLlmHealthStatus()).toEqual({
+      configured: true,
+      state: 'active',
+      consecutiveFailures: 0,
+      lastError: null,
+      lastAttemptAt: expect.any(Number),
+    })
   })
 
   it('falls back through video models until one succeeds', async () => {
@@ -438,6 +445,89 @@ describe('ActivitySemanticService', () => {
 
     expect(result).toBe('third model summary')
     expect(send.mock.calls.map((call) => call[0].model)).toEqual(DEFAULT_VIDEO_MODELS)
+    expect(service.getLlmHealthStatus().state).toBe('active')
+  })
+
+  it('reports configured but waiting before any semantic request runs', () => {
+    const service = new ActivitySemanticService(undefined, {
+      client: { chat: { send: vi.fn() } },
+      usageTracker: { recordUsage: vi.fn() },
+    })
+
+    expect(service.getLlmHealthStatus()).toEqual({
+      configured: true,
+      state: 'unknown',
+      consecutiveFailures: 0,
+      lastError: null,
+      lastAttemptAt: null,
+    })
+  })
+
+  it('marks LLM active after a successful connection test', async () => {
+    const service = new ActivitySemanticService(undefined, {
+      client: { chat: { send: vi.fn().mockResolvedValue(response('OK')) } },
+      usageTracker: { recordUsage: vi.fn() },
+    })
+
+    await service.testConnection()
+
+    expect(service.getLlmHealthStatus()).toEqual({
+      configured: true,
+      state: 'active',
+      consecutiveFailures: 0,
+      lastError: null,
+      lastAttemptAt: expect.any(Number),
+    })
+  })
+
+  it('marks LLM failing after a failed connection test', async () => {
+    const service = new ActivitySemanticService(undefined, {
+      client: { chat: { send: vi.fn().mockRejectedValue(new Error('connect ECONNREFUSED')) } },
+      usageTracker: { recordUsage: vi.fn() },
+    })
+
+    await service.testConnection()
+
+    expect(service.getLlmHealthStatus()).toEqual({
+      configured: true,
+      state: 'failing',
+      consecutiveFailures: 1,
+      lastError: expect.stringContaining('connect ECONNREFUSED'),
+      lastAttemptAt: expect.any(Number),
+    })
+  })
+
+  it('counts consecutive failed summary requests', async () => {
+    const tempDir = createTempDir()
+    tempDirs.push(tempDir)
+    const videoPath = createVideoFile(tempDir)
+
+    const service = new ActivitySemanticService(undefined, {
+      client: { chat: { send: vi.fn().mockRejectedValue(new Error('connect ECONNREFUSED')) } },
+      usageTracker: { recordUsage: vi.fn() },
+      snapshotModels: [],
+      pipelinePreference: 'video',
+    })
+
+    await service.summarizeFromVideo({
+      activity: makeActivity({ id: 'activity-1' }),
+      videoPath,
+      ocrText: 'ignored',
+    })
+
+    await service.summarizeFromVideo({
+      activity: makeActivity({ id: 'activity-2' }),
+      videoPath,
+      ocrText: 'ignored',
+    })
+
+    expect(service.getLlmHealthStatus()).toEqual({
+      configured: true,
+      state: 'failing',
+      consecutiveFailures: 2,
+      lastError: expect.stringContaining('connect ECONNREFUSED'),
+      lastAttemptAt: expect.any(Number),
+    })
   })
 
   it('falls from video pipeline to snapshot pipeline', async () => {

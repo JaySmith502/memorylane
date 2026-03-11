@@ -78,6 +78,16 @@ export interface CustomEndpointStatus {
   hasApiKey: boolean
 }
 
+export type LlmHealthState = 'not_configured' | 'unknown' | 'active' | 'failing'
+
+export interface LlmHealthStatus {
+  configured: boolean
+  state: LlmHealthState
+  consecutiveFailures: number
+  lastError: string | null
+  lastAttemptAt: number | null
+}
+
 export interface SlackIntegrationConfig {
   enabled: boolean
   ownerUserId: string
@@ -187,6 +197,8 @@ export interface MainWindowAPI {
   getCustomEndpoint: () => Promise<CustomEndpointStatus>
   saveCustomEndpoint: (config: CustomEndpointConfig) => Promise<SaveResult>
   deleteCustomEndpoint: () => Promise<SaveResult>
+  getLlmHealth: () => Promise<LlmHealthStatus>
+  testLlmConnection: () => Promise<void>
   // Slack integration
   getSlackSettings: () => Promise<SlackIntegrationStatus>
   saveSlackSettings: (config: SlackIntegrationConfig) => Promise<SaveResult>

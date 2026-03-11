@@ -15,12 +15,14 @@ import {
 import { tryLoadVideoAsDataUrl, encodeSnapshots } from './media'
 import { trySemanticModelChain } from './model-chain'
 import { buildSemanticPrompt } from './prompt'
-import { describeSemanticError } from './response-utils'
+import { describeSemanticError, extractSemanticSummary } from './response-utils'
 import { selectSnapshotFrames } from './sampling'
 import { recordSemanticUsageSafe } from './usage-recording'
 import type {
   ChatContentItem,
   ChatRequest,
+  ChatResponseLike,
+  LlmHealthStatus,
   SemanticMode,
   SemanticPipelinePreference,
   SemanticChatClient,
@@ -46,6 +48,18 @@ export class ActivitySemanticService implements SemanticServiceContract {
   private readonly videoUnsupportedCustomModels = new Set<string>()
 
   private lastRunDiagnostics: SemanticRunDiagnostics | null = null
+  private llmHealth: {
+    consecutiveFailures: number
+    lastError: string | null
+    lastAttemptAt: number | null
+    lastSuccessAt: number | null
+  } = {
+    consecutiveFailures: 0,
+    lastError: null,
+    lastAttemptAt: null,
+    lastSuccessAt: null,
+  }
+  private connectionTestPromise: Promise<void> | null = null
 
   constructor(apiKey?: string, config?: ActivitySemanticServiceConfig) {
     this.videoModels = config?.videoModels?.length
@@ -84,6 +98,64 @@ export class ActivitySemanticService implements SemanticServiceContract {
     return this.isCustomEndpoint
   }
 
+  getLlmHealthStatus(): LlmHealthStatus {
+    const configured = this.isConfigured()
+    if (!configured) {
+      return {
+        configured: false,
+        state: 'not_configured',
+        consecutiveFailures: 0,
+        lastError: null,
+        lastAttemptAt: this.llmHealth.lastAttemptAt,
+      }
+    }
+
+    if (this.llmHealth.consecutiveFailures > 0) {
+      return {
+        configured: true,
+        state: 'failing',
+        consecutiveFailures: this.llmHealth.consecutiveFailures,
+        lastError: this.llmHealth.lastError,
+        lastAttemptAt: this.llmHealth.lastAttemptAt,
+      }
+    }
+
+    if (this.llmHealth.lastSuccessAt !== null) {
+      return {
+        configured: true,
+        state: 'active',
+        consecutiveFailures: 0,
+        lastError: null,
+        lastAttemptAt: this.llmHealth.lastAttemptAt,
+      }
+    }
+
+    return {
+      configured: true,
+      state: 'unknown',
+      consecutiveFailures: 0,
+      lastError: null,
+      lastAttemptAt: this.llmHealth.lastAttemptAt,
+    }
+  }
+
+  async testConnection(): Promise<void> {
+    if (!this.client) {
+      this.resetLlmHealth()
+      return
+    }
+
+    if (this.connectionTestPromise) {
+      return this.connectionTestPromise
+    }
+
+    this.connectionTestPromise = this.runConnectionTest().finally(() => {
+      this.connectionTestPromise = null
+    })
+
+    return this.connectionTestPromise
+  }
+
   updateApiKey(apiKey: string | null): void {
     if (this.usesInjectedClient) {
       log.info('[ActivitySemanticService] Ignoring API key update: injected client active')
@@ -100,10 +172,12 @@ export class ActivitySemanticService implements SemanticServiceContract {
     if (normalizedKey) {
       delete process.env.OPENROUTER_API_KEY
       this.client = new OpenRouter({ apiKey: normalizedKey }) as unknown as SemanticChatClient
+      this.resetLlmHealth()
       return
     }
 
     this.client = null
+    this.resetLlmHealth()
   }
 
   updateEndpoint(config: SemanticEndpointConfig | null, openRouterKey?: string | null): void {
@@ -122,6 +196,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
         serverURL: config.serverURL,
         getTimeoutMs: () => this.requestTimeoutMs,
       })
+      this.resetLlmHealth()
       return
     }
 
@@ -135,6 +210,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
       this.client = new OpenRouter({
         apiKey: normalizedOpenRouterKey,
       }) as unknown as SemanticChatClient
+      this.resetLlmHealth()
       return
     }
 
@@ -142,10 +218,12 @@ export class ActivitySemanticService implements SemanticServiceContract {
       this.client = new OpenRouter({
         apiKey: this.openRouterApiKey,
       }) as unknown as SemanticChatClient
+      this.resetLlmHealth()
       return
     }
 
     this.client = null
+    this.resetLlmHealth()
   }
 
   updatePipelinePreference(preference: SemanticPipelinePreference): void {
@@ -241,6 +319,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
           if (videoResult) {
             diagnostics.chosenMode = 'video'
             diagnostics.chosenModel = videoResult.model
+            this.recordLlmSuccess()
             return videoResult.summary
           }
 
@@ -259,6 +338,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
       if (!diagnostics.fallbackReason) {
         diagnostics.fallbackReason = 'snapshot pipeline disabled by preference'
       }
+      this.updateLlmHealthFromDiagnostics(diagnostics)
       return ''
     }
 
@@ -276,6 +356,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
     diagnostics.selectedSnapshotPaths = selectedSnapshots.map((frame) => frame.frame.filepath)
 
     if (selectedSnapshots.length === 0) {
+      this.updateLlmHealthFromDiagnostics(diagnostics)
       return ''
     }
 
@@ -289,6 +370,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
       },
     })
     if (encodedSnapshots.length === 0) {
+      this.updateLlmHealthFromDiagnostics(diagnostics)
       return ''
     }
 
@@ -324,12 +406,15 @@ export class ActivitySemanticService implements SemanticServiceContract {
     if (snapshotResult) {
       diagnostics.chosenMode = 'snapshot'
       diagnostics.chosenModel = snapshotResult.model
+      this.recordLlmSuccess()
       return snapshotResult.summary
     }
 
     if (!diagnostics.fallbackReason) {
       diagnostics.fallbackReason = 'all snapshot models failed'
     }
+
+    this.updateLlmHealthFromDiagnostics(diagnostics)
 
     return ''
   }
@@ -455,6 +540,109 @@ export class ActivitySemanticService implements SemanticServiceContract {
     }
   }
 
+  private resetLlmHealth(): void {
+    this.llmHealth = {
+      consecutiveFailures: 0,
+      lastError: null,
+      lastAttemptAt: null,
+      lastSuccessAt: null,
+    }
+  }
+
+  private recordLlmSuccess(): void {
+    const now = Date.now()
+    this.llmHealth.consecutiveFailures = 0
+    this.llmHealth.lastError = null
+    this.llmHealth.lastAttemptAt = now
+    this.llmHealth.lastSuccessAt = now
+  }
+
+  private updateLlmHealthFromDiagnostics(diagnostics: SemanticRunDiagnostics): void {
+    const failedAttempts = diagnostics.attempts.filter((attempt) => !attempt.success)
+    const actionableFailures = failedAttempts.filter((attempt) => attempt.error !== 'empty summary')
+
+    if (actionableFailures.length === 0) {
+      return
+    }
+
+    const lastFailure = actionableFailures[actionableFailures.length - 1]
+    this.llmHealth.consecutiveFailures += 1
+    this.llmHealth.lastError = lastFailure?.error ?? 'Unknown LLM error'
+    this.llmHealth.lastAttemptAt = Date.now()
+  }
+
+  private async runConnectionTest(): Promise<void> {
+    const model = this.getProbeModel()
+    if (!model || !this.client) {
+      this.resetLlmHealth()
+      return
+    }
+
+    const startedAt = Date.now()
+    const request: ChatRequest = {
+      model,
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'Reply with OK.' }],
+        },
+      ],
+    }
+
+    try {
+      const response = (await this.withTimeout(
+        this.client.chat.send(request),
+        this.requestTimeoutMs,
+        `semantic model request timed out after ${this.requestTimeoutMs}ms`,
+      )) as ChatResponseLike
+      const summary = extractSemanticSummary(response)
+      if (summary.length === 0) {
+        throw new Error('empty summary')
+      }
+      this.recordLlmSuccess()
+      log.info(
+        '[ActivitySemanticService] Connection test succeeded',
+        JSON.stringify({ model, durationMs: Date.now() - startedAt }),
+      )
+    } catch (error) {
+      const detail = describeSemanticError(error)
+      this.llmHealth.consecutiveFailures += 1
+      this.llmHealth.lastError = detail
+      this.llmHealth.lastAttemptAt = Date.now()
+      log.warn(
+        '[ActivitySemanticService] Connection test failed',
+        JSON.stringify({ model, durationMs: Date.now() - startedAt, error: detail }),
+      )
+    }
+  }
+
+  private getProbeModel(): string | null {
+    const models = this.getEffectiveSnapshotModels()
+    return models[0] ?? null
+  }
+
+  private async withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    message: string,
+  ): Promise<T> {
+    let timeoutHandle: NodeJS.Timeout | null = null
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        reject(new Error(message))
+      }, timeoutMs)
+    })
+
+    try {
+      return await Promise.race([promise, timeoutPromise])
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle)
+      }
+    }
+  }
+
   private configureClient(endpointConfig: SemanticEndpointConfig | null): void {
     if (endpointConfig) {
       const effectiveKey = endpointConfig.apiKey ?? this.openRouterApiKey ?? ''
@@ -466,6 +654,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
         serverURL: endpointConfig.serverURL,
         getTimeoutMs: () => this.requestTimeoutMs,
       })
+      this.resetLlmHealth()
       return
     }
 
@@ -476,10 +665,12 @@ export class ActivitySemanticService implements SemanticServiceContract {
       this.client = new OpenRouter({
         apiKey: this.openRouterApiKey,
       }) as unknown as SemanticChatClient
+      this.resetLlmHealth()
       return
     }
 
     this.client = null
+    this.resetLlmHealth()
     log.warn(
       '[ActivitySemanticService] No API key/client configured - semantic summarization disabled',
     )

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Toaster } from '@components/ui/sonner'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
+import { useLlmHealth } from '@/renderer/hooks/use-llm-health'
 import { Logo } from './components/Logo'
 import { PlanPicker } from './components/PlanPicker'
 import { CaptureControlSection } from './components/CaptureControlSection'
@@ -49,7 +50,15 @@ export function MainWindowApp(): React.JSX.Element {
 
   const loadAll = useCallback(async () => {
     await Promise.all([loadKeyStatus(), loadEndpointStatus(), loadStats()])
-  }, [loadKeyStatus, loadEndpointStatus, loadStats])
+  }, [loadEndpointStatus, loadKeyStatus, loadStats])
+
+  const hasKey = keyStatus?.hasKey ?? false
+  const hasCustomEndpoint = endpointStatus?.enabled ?? false
+  const isConfigured = hasKey || hasCustomEndpoint
+  const { llmHealth } = useLlmHealth({
+    api,
+    enabled: page === 'home' && isConfigured,
+  })
 
   useEffect(() => {
     void api.getStatus().then((status) => {
@@ -87,10 +96,6 @@ export function MainWindowApp(): React.JSX.Element {
     }
   }, [api])
 
-  const hasKey = keyStatus?.hasKey ?? false
-  const hasCustomEndpoint = endpointStatus?.enabled ?? false
-  const isConfigured = hasKey || hasCustomEndpoint
-
   if (page === 'settings') {
     return (
       <div className="min-h-screen antialiased select-none">
@@ -111,12 +116,13 @@ export function MainWindowApp(): React.JSX.Element {
         <Logo />
 
         {!isConfigured ? (
-          <PlanPicker api={api} onKeySet={loadKeyStatus} />
+          <PlanPicker api={api} onKeySet={() => void loadKeyStatus()} />
         ) : (
           <>
             <CaptureControlSection
               capturing={capturing}
               captureHotkeyLabel={captureHotkeyLabel}
+              llmHealth={llmHealth}
               toggling={toggling}
               onToggle={() => void handleToggle()}
             />
