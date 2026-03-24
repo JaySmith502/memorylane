@@ -7,7 +7,8 @@
       "Bash(find \"C:\\\\Users\\\\smith\\\\Documents\\\\1 Projects\\\\memorylane/src/main\" -name \"*.ts\" -type f | xargs wc -l | tail -1)",
       "Bash(cd \"C:\\\\Users\\\\smith\\\\Documents\\\\1 Projects\\\\memorylane\" && find src -type f \\\\\\( -name \"*.ts\" -o -name \"*.tsx\" \\\\\\) ! -path \"*/node_modules/*\" | xargs wc -l | tail -1)",
       "Bash(git -C \"c:\\\\Users\\\\smith\\\\Documents\\\\1 Projects\\\\memorylane\" config credential.helper)",
-      "Bash(git -C \"c:\\\\Users\\\\smith\\\\Documents\\\\1 Projects\\\\memorylane\" remote -v)"
+      "Bash(git -C \"c:\\\\Users\\\\smith\\\\Documents\\\\1 Projects\\\\memorylane\" remote -v)",
+      "Bash(node -e:*)"
     ]
   }
 }
